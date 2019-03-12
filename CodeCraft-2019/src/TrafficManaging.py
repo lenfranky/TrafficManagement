@@ -18,8 +18,13 @@ class Road(object):
 
         # 起始点路口的对象
         self.start_crossing_object = None
-        # 重点路口的对象
+        # 终点路口的对象
         self.end_crossing_object = None
+
+        # 当前时刻各个车道上的车辆{lanes_id: [car_objects]}
+        self.lanes_car_dict = {}
+        # 进行车道的初始化
+        self.lanes_initialization()
 
     def link_to_crossing_object(self, crossing_id_to_object):
         """
@@ -29,6 +34,20 @@ class Road(object):
         """
         self.start_crossing_object = crossing_id_to_object[self.start_crossing_id]
         self.end_crossing_object = crossing_id_to_object[self.end_crossing_id]
+
+    def lanes_initialization(self):
+        """
+        创建道路中的车道
+        :return:
+        """
+        # 车道编号为从1到n，与从-1到-n
+        for lane_id in range(1, self.lanes_num + 1):
+            self.lanes_car_dict[lane_id] = Lane(lane_id=lane_id, length=self.road_length, max_v=self.max_v)
+        if self.flag_is_two_way_road:
+            for lane_id in range(1, self.lanes_num + 1):
+                self.lanes_car_dict[-lane_id] = Lane(lane_id=lane_id, length=self.road_length, max_v=self.max_v)
+        print(self.road_id)
+        print(self.lanes_car_dict.items())
 
 
 class Car(object):
@@ -71,6 +90,59 @@ class Crossing(object):
         self.right_road_object = road_id_to_object[self.right_road_id] if self.right_road_id != -1 else None
         self.down_road_object = road_id_to_object[self.down_road_id] if self.down_road_id != -1 else None
         self.left_road_object = road_id_to_object[self.left_road_id] if self.left_road_id != -1 else None
+
+
+class Lane(object):
+    """
+    用来描述车道的类，内部用列表来实现一个队列
+    """
+    def __init__(self, lane_id, length, max_v):
+        # 车道的id
+        self.lane_id = lane_id
+        # 车道的长度限制
+        self.size = length
+        # 车道上的最高速度
+        self.max_v = max_v
+        # 车辆对象的数组
+        self.queue = []
+
+    def enter_lane(self, car_object):
+        """
+        添加一个车辆对象并返回True，如果队列已满，则返回False
+        :param car_object:
+        :return:
+        """
+        if self.is_full():
+            return False
+        self.queue.append(car_object)
+        return True
+
+    def out_lane(self):
+        """
+        移除并返问队列头部的车辆对象，如果队列为空，则返回None
+        :return:
+        """
+        if self.is_empty():
+            return None
+        return self.queue.pop(0)
+
+    def get_first_car_object(self):
+        """
+        返回队列头部的车辆对象，如果队列为空，则返回None
+        :return:
+        """
+        if self.is_empty():
+            return None
+        return self.queue[0]
+
+    def is_empty(self):
+        return len(self.queue) == 0
+
+    def is_full(self):
+        return len(self.queue) >= self.size
+
+    def show_queue(self):
+        print(self.queue)
 
 
 class TrafficManaging(object):
