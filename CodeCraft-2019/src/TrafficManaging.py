@@ -62,6 +62,10 @@ class Car(object):
         self.max_v = params[3]
         # 车辆的开始时间
         self.start_time = params[4]
+        # 车辆的状态，有初始态，等待态，与终止态
+        # 两种设置方式，一种是0/1，0表示初始态与终止态，1表示等待态，每秒的第一次调度与之后的每次调度需要用两段代码
+        # 另一种为0表示初始态，1表示等待态，2表示终止态，每秒调度完得恢复一次初始态
+        self.status = 0
 
 
 class Crossing(object):
@@ -147,14 +151,20 @@ class Lane(object):
 
 class TrafficManaging(object):
     def __init__(self, road_info_file_path, car_info_file_path, crossing_info_file_path):
-        # 由道路id到道路对象的索引
+        # 由道路id到道路对象的索引{road_id：道路对象}
         self.road_id_to_object = {}
         # 由车辆id到车辆对象的索引
         self.car_id_to_object = {}
         # 由路口id到路口对象的索引
         self.crossing_id_to_object = {}
 
+        # 每个时间点进入道路的车辆的索引，{时间点：车辆对象}
+        self.enter_time_car_object_dict = {}
+
+        # 读取文件
         self.load_file(road_info_file_path, car_info_file_path, crossing_info_file_path)
+        # 建立对象之间的连接
+        self.establish_link()
 
     def load_file(self, road_info_file_path, car_info_file_path, crossing_info_file_path):
         """
@@ -197,8 +207,10 @@ class TrafficManaging(object):
                 car_id = line_params[0]
                 # 实例化车辆对象
                 car_object = Car(params=line_params)
-                # 为车辆对象建立索引
+                # 为车辆对象建立id索引
                 self.car_id_to_object[car_id] = car_object
+                # 为车辆建立进入时间的索引
+                self.enter_time_car_object_dict.get(line_params[4], []).append(car_object)
 
         # 读取路口信息文件
         with open(crossing_info_file_path, mode='r', encoding='utf-8') as file_read:
@@ -220,6 +232,7 @@ class TrafficManaging(object):
         # # 标-1的路口为空
         # self.crossing_id_to_object[-1] = None
 
+    def establish_link(self):
         for road_id, road_object in self.road_id_to_object.items():
             road_object.link_to_crossing_object(self.crossing_id_to_object)
 
