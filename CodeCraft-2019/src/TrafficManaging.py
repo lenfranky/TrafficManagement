@@ -89,6 +89,9 @@ class Crossing(object):
         self.down_road_object = None
         self.left_road_object = None
 
+        # 所连接的下一路口的信息，格式为{next_crossing_id:[road_length, max_v, 0]} (注：最后一个0为测试用)
+        self.next_crossing_dict = {}
+
     def link_to_road_object(self, road_id_to_object):
         """
         与道路的对象建立链接
@@ -302,7 +305,7 @@ class TrafficManaging(object):
 
         for crossing_id in self.crossing_connectivity_dict:
             for next_crossing_id in self.crossing_connectivity_dict[crossing_id]:
-                print (next_crossing_id)
+                # print (next_crossing_id)
                 curr_road_length = self.crossing_connectivity_dict[crossing_id][next_crossing_id][0]
                 curr_v = min(self.crossing_connectivity_dict[crossing_id][next_crossing_id][1], max_v)
                 self.crossing_connectivity_dict[crossing_id][next_crossing_id][2] = int((curr_road_length + curr_v - 1) / curr_v)
@@ -336,12 +339,12 @@ class TrafficManaging(object):
             visited.append(node)
             node = self.find_shortest_node(cost, dist, visited)
 
-        # min_time_route = []
-        # parent = parents[end_crossing_id]
-        # min_time_route.append(parent)
-        # while parent:
-        #     parent = parents[parent]
-        #     min_time_route = [parent].append(min_time_route)
+        min_time_route = []
+        parent = parents[end_crossing_id]
+        min_time_route.append(parent)
+        while parent:
+            parent = parents[parent]
+            min_time_route = [parent].extend(min_time_route)
 
 
 def min_path_test(config_num=1):
