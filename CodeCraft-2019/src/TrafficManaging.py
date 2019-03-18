@@ -200,7 +200,7 @@ class TrafficManaging(object):
                 line_params = list(map(int, line.split(',')))
                 # 若参数数量错误，则打印提示并跳过
                 if len(line_params) != 7:
-                    print("WRONG INPUT!")
+                    print("WRONG INPUT! -- Wrong road_info")
                     continue
 
                 road_id = line_params[0]
@@ -218,7 +218,7 @@ class TrafficManaging(object):
                 line_params = list(map(int, line.split(',')))
                 # 若参数数量错误，则打印提示并跳过
                 if len(line_params) != 5:
-                    print("WRONG INPUT!")
+                    print("WRONG INPUT! -- Wrong car_info")
                     continue
 
                 car_id = line_params[0]
@@ -350,9 +350,10 @@ class TrafficManaging(object):
         min_time_route = []
         parent = parents[end_crossing_id]
         min_time_route.append(parent)
-        while parent:
+        while parent > 0:
+            print (min_time_route)
             parent = parents[parent]
-            min_time_route = [parent].extend(min_time_route)
+            min_time_route.append(parent)
 
 
 def min_path_test(config_num=1):
