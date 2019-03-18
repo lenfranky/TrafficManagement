@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import time
 class Road(object):
     def __init__(self, params):
         # 道路id
@@ -281,19 +282,19 @@ class TrafficManaging(object):
                     crossing_object.next_crossing_dict[road_object.start_crossing_id] = [road_object.road_length,
                                                                                          road_object.max_v, 0]
 
-    @ staticmethod
-    def find_shortest_node(cost, dist, visited):
+    def find_shortest_node(self, cost, visited):
         """
         找到当前状态的最近未访问点
         :param cost:
-        :param dist:
         :param visited:
         :return:
         """
         min_dist = None
         node = None
-        for i in dist.keys():
-            if (i not in visited) and ((min_dist is None) or (cost[i] < min_dist)):
+        for i in self.crossing_id_to_object:
+            if i in visited or cost[i] < 0:
+                continue
+            if (min_dist is None) or (cost[i] < min_dist):
                 min_dist = cost[i]
                 node = i
         # print (node)
@@ -310,57 +311,83 @@ class TrafficManaging(object):
         end_crossing_id = car_object.end_crossing_id
         max_v = car_object.max_v
 
-        for crossing_id in self.crossing_connectivity_dict:
-            for next_crossing_id in self.crossing_connectivity_dict[crossing_id]:
+        for crossing_id in self.crossing_id_to_object:
+            for next_crossing_id in self.crossing_id_to_object[crossing_id].next_crossing_dict:
                 # print (next_crossing_id)
-                curr_road_length = self.crossing_connectivity_dict[crossing_id][next_crossing_id][0]
-                curr_v = min(self.crossing_connectivity_dict[crossing_id][next_crossing_id][1], max_v)
-                self.crossing_connectivity_dict[crossing_id][next_crossing_id][2] = int(
+                curr_road_length = self.crossing_id_to_object[crossing_id].next_crossing_dict[next_crossing_id][0]
+                curr_v = min(self.crossing_id_to_object[crossing_id].next_crossing_dict[next_crossing_id][1], max_v)
+                # 更新当前的道路行驶所需时间
+                self.crossing_id_to_object[crossing_id].next_crossing_dict[next_crossing_id][2] = int(
                     (curr_road_length + curr_v - 1) / curr_v)
-        dist = self.crossing_connectivity_dict
+        # dist = self.crossing_connectivity_dict
 
         # 由起点（结点1）到其余顶点的最短距离，-1代表无法到达
         cost = {}
-        for crossing_id in self.crossing_connectivity_dict:
+        for crossing_id in self.crossing_id_to_object:
             cost[crossing_id] = -1
         cost[start_crossing_id] = 0
-        for next_crossing_id in self.crossing_connectivity_dict[start_crossing_id]:
-            cost[next_crossing_id] = self.crossing_connectivity_dict[start_crossing_id][next_crossing_id][2]
+        for next_crossing_id in self.crossing_id_to_object[start_crossing_id].next_crossing_dict:
+            cost[next_crossing_id] = self.crossing_id_to_object[start_crossing_id].next_crossing_dict[next_crossing_id][
+                2]
 
         # parent代表到达这个结点的最短路径的前一个结点
         parents = {}
-        for crossing_id in self.crossing_connectivity_dict:
+        for crossing_id in self.crossing_id_to_object:
             parents[crossing_id] = -1
         parents[start_crossing_id] = None
+        for crossing_id in self.crossing_id_to_object[car_object.start_crossing_id].next_crossing_dict:
+            parents[crossing_id] = start_crossing_id
 
         # 起始结点默认已经访问过
         visited = [start_crossing_id]
 
         # 更新最短路径
-        node = self.find_shortest_node(cost, dist, visited)
+        node = self.find_shortest_node(cost, visited)
         while node:
-            for i in dist[node]:  # 所有node结点的邻居结点
-                newcost = cost[node] + dist[node][i][2]
-                if cost[i] < 0 or newcost < cost[i]:
+            # print("node:\t" + str(node))
+            for i in self.crossing_id_to_object[node].next_crossing_dict:  # 所有node结点的邻居结点
+                new_cost = cost[node] + self.crossing_id_to_object[node].next_crossing_dict[i][2]
+                if cost[i] < 0 or new_cost < cost[i]:
+                    # print(str(i) + "\t:\t" + str(cost[i]) + "\t:\t" + str(new_cost))
                     parents[i] = node
-                    cost[i] = newcost
+                    # print(parents)
+                    cost[i] = new_cost
             visited.append(node)
-            node = self.find_shortest_node(cost, dist, visited)
+            node = self.find_shortest_node(cost, visited)
 
         min_time_route = []
         parent = parents[end_crossing_id]
         min_time_route.append(parent)
-        while parent > 0:
-            print (min_time_route)
+        # print(parents)
+        # print(min_time_route)
+
+        # 不断向前索引，得到我们所需的路径
+        while parent:
+            # print(min_time_route)
             parent = parents[parent]
             min_time_route.append(parent)
 
+        # 将前面倒序的列表做一次反转，并将start_node的None删去
+        res = []
+        while len(min_time_route) > 0:
+            curr_crossing_id = min_time_route.pop()
+            if curr_crossing_id:
+                res.append(curr_crossing_id)
+
+        # print(cost[end_crossing_id])
+        # print(res)
+
 
 def min_path_test(config_num=1):
+    start_time = time.time()
     tm = TrafficManaging('../config_%d/road.txt' % config_num, '../config_%d/car.txt' % config_num,
                          '../config_%d/cross.txt' % config_num)
-    tm.find_min_time_path_with_dijkstra(tm.car_id_to_object[10001])
+    print(time.time()-start_time)
+    start_time = time.time()
+    for i in range(100):
+        tm.find_min_time_path_with_dijkstra(tm.car_id_to_object[10001])
+    print(time.time() - start_time)
 
 
 if __name__ == '__main__':
-    min_path_test(15)
+    min_path_test(11)
