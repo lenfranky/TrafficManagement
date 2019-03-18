@@ -257,6 +257,29 @@ class TrafficManaging(object):
         for crossing_id, crossing_object in self.crossing_id_to_object.items():
             crossing_object.link_to_road_object(self.road_id_to_object)
 
+    def has_no_deadlock(self):
+        """
+        检测是否有死锁
+        :return: 如果没有死锁，则返回True
+        """
+        W_status_car_list = {}
+        for car_id in self.car_id_to_object:
+            car_object = self.car_id_to_object[car_id]
+            if car_object.status == 'W':
+                W_status_car_list[car_id] = car_object
+
+        in_dgree_dict = {}
+        edge_array = []
+        zero_in_degree_vertex_list = []
+        zero_in_degree_vertex_count = []
+
+        for car_id in W_status_car_list:
+            pass
+
+
+
+        return False
+
     def init_crossing_connectivity(self):
         """
         建立路口间的连通性索引
@@ -384,10 +407,10 @@ def min_path_test(config_num=1):
                          '../config_%d/cross.txt' % config_num)
     print(time.time()-start_time)
     start_time = time.time()
-    for i in range(100):
-        tm.find_min_time_path_with_dijkstra(tm.car_id_to_object[10001])
+    for car_id in tm.car_id_to_object:
+        tm.find_min_time_path_with_dijkstra(tm.car_id_to_object[car_id])
     print(time.time() - start_time)
 
 
 if __name__ == '__main__':
-    min_path_test(11)
+    min_path_test(7)
