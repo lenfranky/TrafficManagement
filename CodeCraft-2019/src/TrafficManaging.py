@@ -46,8 +46,8 @@ class Road(object):
         if self.flag_is_two_way_road:
             for lane_id in range(1, self.lanes_num + 1):
                 self.lanes_car_dict[-lane_id] = Lane(lane_id=lane_id, length=self.road_length, max_v=self.max_v)
-        print(self.road_id)
-        print(self.lanes_car_dict.items())
+        # print(self.road_id)
+        # print(self.lanes_car_dict.items())
 
 
 class Car(object):
@@ -55,17 +55,22 @@ class Car(object):
         # 车俩的id
         self.car_id = params[0]
         # 起始路口id
-        self.start_crossing_is = params[1]
+        self.start_crossing_id = params[1]
         # 重点路口id
         self.end_crossing_id = params[2]
         # 车辆的最高速度
         self.max_v = params[3]
         # 车辆的开始时间
         self.start_time = params[4]
-        # 车辆的状态，有初始态，等待态，与终止态
-        # 两种设置方式，一种是0/1，0表示初始态与终止态，1表示等待态，每秒的第一次调度与之后的每次调度需要用两段代码
-        # 另一种为0表示初始态，1表示等待态，2表示终止态，每秒调度完得恢复一次初始态
-        self.status = 0
+        # 车辆的状态，有初始态I，冲突态C，等待态W，与终止态F
+        # （删掉）两种设置方式，一种是0/1，0表示初始态与终止态，1表示等待态，每秒的第一次调度与之后的每次调度需要用两段代码
+        # （删掉）另一种为0表示初始态，1表示等待态，2表示终止态，每秒调度完得恢复一次初始态
+        self.status = 'I'
+
+        # 堵到该车的车辆
+        self.w_next_car = None
+        # 该车所堵的所有车
+        self.w_last_car = []
 
 
 class Crossing(object):
@@ -153,18 +158,27 @@ class TrafficManaging(object):
     def __init__(self, road_info_file_path, car_info_file_path, crossing_info_file_path):
         # 由道路id到道路对象的索引{road_id：道路对象}
         self.road_id_to_object = {}
+
         # 由车辆id到车辆对象的索引
         self.car_id_to_object = {}
+
         # 由路口id到路口对象的索引
         self.crossing_id_to_object = {}
+
+        # 记录路口的连通性，结构为{crossing_id:{next_crossing_id:[road_length, road_max_v]}}
+        self.crossing_connectivity_dict = {}
 
         # 每个时间点进入道路的车辆的索引，{时间点：车辆对象}
         self.enter_time_car_object_dict = {}
 
         # 读取文件
         self.load_file(road_info_file_path, car_info_file_path, crossing_info_file_path)
+
         # 建立对象之间的连接
         self.establish_link()
+
+        # 建立路口连通性的索引
+        self.init_crossing_connectivity()
 
     def load_file(self, road_info_file_path, car_info_file_path, crossing_info_file_path):
         """
@@ -239,8 +253,102 @@ class TrafficManaging(object):
         for crossing_id, crossing_object in self.crossing_id_to_object.items():
             crossing_object.link_to_road_object(self.road_id_to_object)
 
+    def init_crossing_connectivity(self):
+        """
+        建立路口间的连通性索引
+        :return:
+        """
+        for crossing_id in self.crossing_id_to_object:
+            self.crossing_connectivity_dict[crossing_id] = {}
+        for crossing_id in self.crossing_id_to_object:
+            crossing_object = self.crossing_id_to_object[crossing_id]
+            for road_object in [crossing_object.up_road_object, crossing_object.right_road_object, crossing_object.down_road_object, crossing_object.left_road_object]:
+                # road_object = Road(road_object)
+                if road_object is None:
+                    continue
+                if road_object.start_crossing_id == crossing_id:
+                    self.crossing_connectivity_dict[crossing_id][road_object.end_crossing_id] = [road_object.road_length, road_object.max_v, 0]
+                elif road_object.flag_is_two_way_road and road_object.end_crossing_id == crossing_id:
+                    self.crossing_connectivity_dict[crossing_id][road_object.start_crossing_id] = [road_object.road_length, road_object.max_v, 0]
 
-if __name__ == '__main__':
-    config_num = 1
+    @ staticmethod
+    def find_shortest_node(cost, dist, visited):
+        """
+        找到当前状态的最近未访问点
+        :param cost:
+        :param dist:
+        :param visited:
+        :return:
+        """
+        min_dist = None
+        node = None
+        for i in dist.keys():
+            if (i not in visited) and ((min_dist is None) or (cost[i] < min_dist)):
+                min_dist = cost[i]
+                node = i
+        # print (node)
+        return node
+
+    def find_min_time_path_with_dijkstra(self, car_object):
+        """
+        通过Dijkstra算法获取最短路径
+        :param car_object:
+        :return:
+        """
+        # car_object = Car(car_object)
+        start_crossing_id = car_object.start_crossing_id
+        end_crossing_id = car_object.end_crossing_id
+        max_v = car_object.max_v
+
+        for crossing_id in self.crossing_connectivity_dict:
+            for next_crossing_id in self.crossing_connectivity_dict[crossing_id]:
+                print (next_crossing_id)
+                curr_road_length = self.crossing_connectivity_dict[crossing_id][next_crossing_id][0]
+                curr_v = min(self.crossing_connectivity_dict[crossing_id][next_crossing_id][1], max_v)
+                self.crossing_connectivity_dict[crossing_id][next_crossing_id][2] = int((curr_road_length + curr_v - 1) / curr_v)
+        dist = self.crossing_connectivity_dict
+
+        # 由起点（结点1）到其余顶点的最短距离，-1代表无法到达
+        cost = {}
+        for crossing_id in self.crossing_connectivity_dict:
+            cost[crossing_id] = -1
+        cost[start_crossing_id] = 0
+        for next_crossing_id in self.crossing_connectivity_dict[start_crossing_id]:
+            cost[next_crossing_id] = self.crossing_connectivity_dict[start_crossing_id][next_crossing_id][2]
+
+        # parent代表到达这个结点的最短路径的前一个结点
+        parents = {}
+        for crossing_id in self.crossing_connectivity_dict:
+            parents[crossing_id] = -1
+        parents[start_crossing_id] = None
+
+        # 起始结点默认已经访问过
+        visited = [start_crossing_id]
+
+        # 更新最短路径
+        node = self.find_shortest_node(cost, dist, visited)
+        while node:
+            for i in dist[node]:  # 所有node结点的邻居结点
+                newcost = cost[node] + dist[node][i][2]
+                if cost[i] < 0 or newcost < cost[i]:
+                    parents[i] = node
+                    cost[i] = newcost
+            visited.append(node)
+            node = self.find_shortest_node(cost, dist, visited)
+
+        # min_time_route = []
+        # parent = parents[end_crossing_id]
+        # min_time_route.append(parent)
+        # while parent:
+        #     parent = parents[parent]
+        #     min_time_route = [parent].append(min_time_route)
+
+
+def min_path_test(config_num=1):
     tm = TrafficManaging('../config_%d/road.txt' % config_num, '../config_%d/car.txt' % config_num,
                          '../config_%d/cross.txt' % config_num)
+    tm.find_min_time_path_with_dijkstra(tm.car_id_to_object[10001])
+
+
+if __name__ == '__main__':
+    min_path_test(15)
