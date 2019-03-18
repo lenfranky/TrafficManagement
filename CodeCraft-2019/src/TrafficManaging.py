@@ -265,14 +265,21 @@ class TrafficManaging(object):
             self.crossing_connectivity_dict[crossing_id] = {}
         for crossing_id in self.crossing_id_to_object:
             crossing_object = self.crossing_id_to_object[crossing_id]
-            for road_object in [crossing_object.up_road_object, crossing_object.right_road_object, crossing_object.down_road_object, crossing_object.left_road_object]:
+            for road_object in [crossing_object.up_road_object, crossing_object.right_road_object,
+                                crossing_object.down_road_object, crossing_object.left_road_object]:
                 # road_object = Road(road_object)
                 if road_object is None:
                     continue
                 if road_object.start_crossing_id == crossing_id:
-                    self.crossing_connectivity_dict[crossing_id][road_object.end_crossing_id] = [road_object.road_length, road_object.max_v, 0]
+                    self.crossing_connectivity_dict[crossing_id][road_object.end_crossing_id] = [
+                        road_object.road_length, road_object.max_v, 0]
+                    crossing_object.next_crossing_dict[road_object.end_crossing_id] = [road_object.road_length,
+                                                                                       road_object.max_v, 0]
                 elif road_object.flag_is_two_way_road and road_object.end_crossing_id == crossing_id:
-                    self.crossing_connectivity_dict[crossing_id][road_object.start_crossing_id] = [road_object.road_length, road_object.max_v, 0]
+                    self.crossing_connectivity_dict[crossing_id][road_object.start_crossing_id] = [
+                        road_object.road_length, road_object.max_v, 0]
+                    crossing_object.next_crossing_dict[road_object.start_crossing_id] = [road_object.road_length,
+                                                                                         road_object.max_v, 0]
 
     @ staticmethod
     def find_shortest_node(cost, dist, visited):
@@ -308,7 +315,8 @@ class TrafficManaging(object):
                 # print (next_crossing_id)
                 curr_road_length = self.crossing_connectivity_dict[crossing_id][next_crossing_id][0]
                 curr_v = min(self.crossing_connectivity_dict[crossing_id][next_crossing_id][1], max_v)
-                self.crossing_connectivity_dict[crossing_id][next_crossing_id][2] = int((curr_road_length + curr_v - 1) / curr_v)
+                self.crossing_connectivity_dict[crossing_id][next_crossing_id][2] = int(
+                    (curr_road_length + curr_v - 1) / curr_v)
         dist = self.crossing_connectivity_dict
 
         # 由起点（结点1）到其余顶点的最短距离，-1代表无法到达
