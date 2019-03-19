@@ -71,7 +71,10 @@ class Car(object):
         # 堵到该车的车辆
         self.w_next_car = None
         # 该车所堵的所有车
-        self.w_last_car = []
+        self.w_last_car = None
+
+        # 该车在死锁检测中是否已被删除
+        self.deleted_in_deadlock_detection = 0
 
 
 class Crossing(object):
@@ -257,26 +260,63 @@ class TrafficManaging(object):
         for crossing_id, crossing_object in self.crossing_id_to_object.items():
             crossing_object.link_to_road_object(self.road_id_to_object)
 
-    def has_no_deadlock(self):
+    def has_no_deadlock_in_derict_graph(self):
         """
         检测是否有死锁
         :return: 如果没有死锁，则返回True
         """
-        W_status_car_list = {}
+        W_status_car_list = []
         for car_id in self.car_id_to_object:
             car_object = self.car_id_to_object[car_id]
             if car_object.status == 'W':
-                W_status_car_list[car_id] = car_object
+                W_status_car_list.append(car_object)
 
         in_dgree_dict = {}
         edge_array = []
         zero_in_degree_vertex_list = []
         zero_in_degree_vertex_count = []
 
-        for car_id in W_status_car_list:
-            pass
+        vertex_to_delete_list = []
 
+        for car_object in W_status_car_list:
+            if car_object.w_next_car.status != 'W':
+                vertex_to_delete_list.append(car_object)
 
+        return False
+
+    def has_no_deadlock_in(self):
+        """
+        检测当前调度状态下是否有死锁
+        :return: 若有死锁，则返回True
+        """
+        # 遍历所有车辆，将状态为W的车辆取出，并保存
+        w_status_car_list = []
+        for car_id in self.car_id_to_object:
+            car_object = self.car_id_to_object[car_id]
+            if car_object.status == 'W':
+                w_status_car_list.append(car_object)
+
+        # 遍历所有W节点的车辆，将没有堵住其他车辆的车找到并记录，作为root_node
+        root_node_list = []
+        for car_object in w_status_car_list:
+            if car_object.w_last_car.status != 'W':
+                root_node_list.append(car_object)
+
+        # 通过root_node遍历每一个链表，在遍历的同时记录当前走过多少个节点
+        # 若当前走过的节点数量大于当前的总的W状态车的数量，则存在死锁
+        # 若一个链表被遍历完，则将总的W状态车的数量减去当前链表中走过的点的数量，并从下一个root_node开始遍历下一个链表
+        total_list_length = len(w_status_car_list)
+        for node in root_node_list:
+            curr_count = 0
+            while True:
+                curr_count += 1
+                if curr_count > total_list_length:
+                    return True
+                if node.w_next_car is None:
+                    break
+                else:
+                    node = node.w_next_car
+            total_list_length -= curr_count
 
         return False
 
