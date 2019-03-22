@@ -93,7 +93,13 @@ class Crossing(object):
         self.down_road_object = None
         self.left_road_object = None
 
-        # 所连接的下一路口的信息，格式为{next_crossing_id:[road_length, max_v, 0]} (注：最后一个0为测试用)
+        # 直接相邻的路口的对象
+        self.up_crossing_object = None
+        self.right_crossing_object = None
+        self.down_crossing_object = None
+        self.left_crossing_object = None
+
+        # 所连接的下一路口的信息，格式为{next_crossing_id:[road_length, max_v, 0, road_id]} (注：倒数第二个0为测试用)
         self.next_crossing_dict = {}
 
     def link_to_road_object(self, road_id_to_object):
@@ -196,7 +202,7 @@ class TrafficManaging(object):
         :return:
         """
         # 读取道路信息文件
-        with open(road_info_file_path, mode='r', encoding='utf-8') as file_read:
+        with open(road_info_file_path, mode='r') as file_read:
             for line in file_read:
                 if line[0] == '#' or len(line) == 0:
                     continue
@@ -214,7 +220,7 @@ class TrafficManaging(object):
                 self.road_id_to_object[road_id] = road_object
 
         # 读取车辆信息文件
-        with open(car_info_file_path, mode='r', encoding='utf-8') as file_read:
+        with open(car_info_file_path, mode='r') as file_read:
             for line in file_read:
                 if line[0] == '#' or len(line) == 0:
                     continue
@@ -231,10 +237,13 @@ class TrafficManaging(object):
                 # 为车辆对象建立id索引
                 self.car_id_to_object[car_id] = car_object
                 # 为车辆建立进入时间的索引
-                self.enter_time_car_object_dict.get(line_params[4], []).append(car_object)
+                if line_params[4] in self.enter_time_car_object_dict:
+                    self.enter_time_car_object_dict.get(line_params[4]).append(car_object)
+                else:
+                    self.enter_time_car_object_dict[line_params[4]] = [car_object]
 
         # 读取路口信息文件
-        with open(crossing_info_file_path, mode='r', encoding='utf-8') as file_read:
+        with open(crossing_info_file_path, mode='r') as file_read:
             for line in file_read:
                 if line[0] == '#' or len(line) == 0:
                     continue
@@ -329,21 +338,79 @@ class TrafficManaging(object):
             self.crossing_connectivity_dict[crossing_id] = {}
         for crossing_id in self.crossing_id_to_object:
             crossing_object = self.crossing_id_to_object[crossing_id]
-            for road_object in [crossing_object.up_road_object, crossing_object.right_road_object,
-                                crossing_object.down_road_object, crossing_object.left_road_object]:
-                # road_object = Road(road_object)
-                if road_object is None:
-                    continue
+            # for road_object in [crossing_object.up_road_object, crossing_object.right_road_object,
+            #                     crossing_object.down_road_object, crossing_object.left_road_object]:
+            road_object = crossing_object.up_road_object
+            if road_object is not None:
                 if road_object.start_crossing_id == crossing_id:
                     self.crossing_connectivity_dict[crossing_id][road_object.end_crossing_id] = [
                         road_object.road_length, road_object.max_v, 0]
                     crossing_object.next_crossing_dict[road_object.end_crossing_id] = [road_object.road_length,
-                                                                                       road_object.max_v, 0]
+                                                                                       road_object.max_v, 0,
+                                                                                       road_object.road_id]
+                    next_crossing_object = self.crossing_id_to_object[road_object.end_crossing_id]
                 elif road_object.flag_is_two_way_road and road_object.end_crossing_id == crossing_id:
                     self.crossing_connectivity_dict[crossing_id][road_object.start_crossing_id] = [
                         road_object.road_length, road_object.max_v, 0]
                     crossing_object.next_crossing_dict[road_object.start_crossing_id] = [road_object.road_length,
-                                                                                         road_object.max_v, 0]
+                                                                                         road_object.max_v, 0,
+                                                                                         road_object.road_id]
+                    next_crossing_object = self.crossing_id_to_object[road_object.start_crossing_id]
+                crossing_object.up_crossing_object = next_crossing_object
+
+            road_object = crossing_object.right_road_object
+            if road_object is not None:
+                if road_object.start_crossing_id == crossing_id:
+                    self.crossing_connectivity_dict[crossing_id][road_object.end_crossing_id] = [
+                        road_object.road_length, road_object.max_v, 0]
+                    crossing_object.next_crossing_dict[road_object.end_crossing_id] = [road_object.road_length,
+                                                                                       road_object.max_v, 0,
+                                                                                       road_object.road_id]
+                    next_crossing_object = self.crossing_id_to_object[road_object.end_crossing_id]
+                elif road_object.flag_is_two_way_road and road_object.end_crossing_id == crossing_id:
+                    self.crossing_connectivity_dict[crossing_id][road_object.start_crossing_id] = [
+                        road_object.road_length, road_object.max_v, 0]
+                    crossing_object.next_crossing_dict[road_object.start_crossing_id] = [road_object.road_length,
+                                                                                         road_object.max_v, 0,
+                                                                                         road_object.road_id]
+                    next_crossing_object = self.crossing_id_to_object[road_object.start_crossing_id]
+                crossing_object.right_crossing_object = next_crossing_object
+
+            road_object = crossing_object.down_road_object
+            if road_object is not None:
+                if road_object.start_crossing_id == crossing_id:
+                    self.crossing_connectivity_dict[crossing_id][road_object.end_crossing_id] = [
+                        road_object.road_length, road_object.max_v, 0]
+                    crossing_object.next_crossing_dict[road_object.end_crossing_id] = [road_object.road_length,
+                                                                                       road_object.max_v, 0,
+                                                                                       road_object.road_id]
+                    next_crossing_object = self.crossing_id_to_object[road_object.end_crossing_id]
+                elif road_object.flag_is_two_way_road and road_object.end_crossing_id == crossing_id:
+                    self.crossing_connectivity_dict[crossing_id][road_object.start_crossing_id] = [
+                        road_object.road_length, road_object.max_v, 0]
+                    crossing_object.next_crossing_dict[road_object.start_crossing_id] = [road_object.road_length,
+                                                                                         road_object.max_v, 0,
+                                                                                         road_object.road_id]
+                    next_crossing_object = self.crossing_id_to_object[road_object.start_crossing_id]
+                crossing_object.down_crossing_object = next_crossing_object
+
+            road_object = crossing_object.left_road_object
+            if road_object is not None:
+                if road_object.start_crossing_id == crossing_id:
+                    self.crossing_connectivity_dict[crossing_id][road_object.end_crossing_id] = [
+                        road_object.road_length, road_object.max_v, 0]
+                    crossing_object.next_crossing_dict[road_object.end_crossing_id] = [road_object.road_length,
+                                                                                       road_object.max_v, 0,
+                                                                                       road_object.road_id]
+                    next_crossing_object = self.crossing_id_to_object[road_object.end_crossing_id]
+                elif road_object.flag_is_two_way_road and road_object.end_crossing_id == crossing_id:
+                    self.crossing_connectivity_dict[crossing_id][road_object.start_crossing_id] = [
+                        road_object.road_length, road_object.max_v, 0]
+                    crossing_object.next_crossing_dict[road_object.start_crossing_id] = [road_object.road_length,
+                                                                                         road_object.max_v, 0,
+                                                                                         road_object.road_id]
+                    next_crossing_object = self.crossing_id_to_object[road_object.start_crossing_id]
+                crossing_object.left_crossing_object = next_crossing_object
 
     def find_shortest_node(self, cost, visited):
         """
@@ -396,10 +463,10 @@ class TrafficManaging(object):
         # parent代表到达这个结点的最短路径的前一个结点
         parents = {}
         for crossing_id in self.crossing_id_to_object:
-            parents[crossing_id] = -1
+            parents[crossing_id] = None
         parents[start_crossing_id] = None
         for crossing_id in self.crossing_id_to_object[car_object.start_crossing_id].next_crossing_dict:
-            parents[crossing_id] = start_crossing_id
+            parents[crossing_id] = self.crossing_id_to_object[start_crossing_id]
 
         # 起始结点默认已经访问过
         visited = [start_crossing_id]
@@ -408,11 +475,12 @@ class TrafficManaging(object):
         node = self.find_shortest_node(cost, visited)
         while node:
             # print("node:\t" + str(node))
-            for i in self.crossing_id_to_object[node].next_crossing_dict:  # 所有node结点的邻居结点
-                new_cost = cost[node] + self.crossing_id_to_object[node].next_crossing_dict[i][2]
+            curr_crossing_object = self.crossing_id_to_object[node]
+            for i in curr_crossing_object.next_crossing_dict:  # 所有node结点的邻居结点
+                new_cost = cost[node] + curr_crossing_object.next_crossing_dict[i][2]
                 if cost[i] < 0 or new_cost < cost[i]:
                     # print(str(i) + "\t:\t" + str(cost[i]) + "\t:\t" + str(new_cost))
-                    parents[i] = node
+                    parents[i] = curr_crossing_object
                     # print(parents)
                     cost[i] = new_cost
             visited.append(node)
@@ -420,25 +488,157 @@ class TrafficManaging(object):
 
         min_time_route = []
         parent = parents[end_crossing_id]
-        min_time_route.append(parent)
+        min_time_route.append(parent.next_crossing_dict[end_crossing_id][3])
         # print(parents)
         # print(min_time_route)
 
         # 不断向前索引，得到我们所需的路径
-        while parent:
+        curr_crossing_id = parent.crossing_id
+        while True:
             # print(min_time_route)
-            parent = parents[parent]
-            min_time_route.append(parent)
+            parent = parents[curr_crossing_id]
+            if parent is None:
+                break
+            min_time_route.append(parent.next_crossing_dict[curr_crossing_id][3])
+            curr_crossing_id = parent.crossing_id
 
         # 将前面倒序的列表做一次反转，并将start_node的None删去
         res = []
-        while len(min_time_route) > 0:
-            curr_crossing_id = min_time_route.pop()
-            if curr_crossing_id:
-                res.append(curr_crossing_id)
-
+        # while len(min_time_route) > 0:
+        #     curr_crossing_id = min_time_route.pop().crossing_id
+        #     if curr_crossing_id:
+        #         res.append(curr_crossing_id)
+        #
         # print(cost[end_crossing_id])
         # print(res)
+
+        # 将min_time_route进行反序排列
+        res = min_time_route[::-1]
+
+        # print(res)
+        # print(cost[end_crossing_id])
+
+        return cost[end_crossing_id], res
+
+    def find_min_time_path_with_floyd(self):
+        size = len(self.crossing_id_to_object)
+        dis = [[-1] * size for i in range(size)]
+        for crossing_id in self.crossing_id_to_object:
+            crossing_object = self.crossing_id_to_object[crossing_id]
+
+    def get_res(self, answer_path = 'answer.txt'):
+        file_write = open(answer_path, mode='w')
+
+        curr_time = 0
+        for plan_time, car_object_list in self.enter_time_car_object_dict.items():
+            if curr_time < plan_time:
+                curr_time = plan_time
+            for car_object in car_object_list:
+                file_write.write("(%d, %d" % (car_object.car_id, curr_time))
+                cost, min_time_route = self.find_min_time_path_with_dijkstra(car_object)
+                curr_time += cost
+                for road_id in min_time_route:
+                    file_write.write(", %d" % road_id)
+                file_write.write(")\n")
+
+        file_write.close()
+
+    def get_root_node(self):
+        root_node = None
+        root_node_candidate = []
+        for crossing_id, crossing_object in self.crossing_id_to_object.items():
+            if crossing_object.up_road_object is None and crossing_object.left_road_object is None:
+                root_node_candidate.append(crossing_object)
+
+        if len(root_node_candidate) > 1:
+            delete_node_list = []
+            for crossing_object in root_node_candidate:
+                curr_crossing = crossing_object
+                while curr_crossing is not None:
+                    curr_crossing = curr_crossing.down_road_object
+                    if curr_crossing.left_road_object is not None:
+                        delete_node_list.append(crossing_object)
+                        break
+                if crossing_object in delete_node_list:
+                    continue
+                curr_crossing = crossing_object
+                while curr_crossing is not None:
+                    curr_crossing = curr_crossing.right_road_object
+                    if curr_crossing.up_road_object is not None:
+                        delete_node_list.append(crossing_object)
+                        break
+            for crossing_object in root_node_candidate:
+                if crossing_object not in delete_node_list:
+                    root_node = crossing_object
+
+        else:
+            root_node = root_node_candidate[0]
+
+        return root_node
+
+    def get_crossing_array(self):
+        root_node = self.get_root_node()
+        column_count = 0
+        row_count = 0
+        first_row_node_list = []
+        first_column_node_list = []
+
+        curr_node = root_node
+        while curr_node is not None:
+            first_row_node_list.append(curr_node)
+            curr_node = curr_node.left_crossing_object
+
+        curr_node = root_node
+        while curr_node is not None:
+            first_column_node_list.append(curr_node)
+            curr_node = curr_node.down_crossing_object
+
+        for first_node in first_row_node_list:
+            curr_node = first_node
+            count = 0
+            while curr_node is not None:
+                curr_node = curr_node.down_crossing_object
+                count += 1
+            if count > row_count:
+                row_count = count
+
+        for first_node in first_column_node_list:
+            curr_node = first_node
+            count = 0
+            while curr_node is not None:
+                curr_node = curr_node.right_crossing_object
+                count += 1
+            if count > column_count:
+                column_count = count
+
+        crossing_array = [[None] * column_count for i in range(row_count)]
+        print(crossing_array)
+
+    def get_res_per_crossing(self):
+        crossing_car_dict = {}
+        for car_id, car_object in self.car_id_to_object.items():
+            if car_object.start_crossing_id in crossing_car_dict:
+                crossing_car_dict[car_object.start_crossing_id].append(car_object)
+            else:
+                crossing_car_dict[car_object.start_crossing_id] = []
+
+        car_num_list = []
+        for crossing_id, car_object_list in crossing_car_dict.items():
+            car_num_list.append(len(car_object_list))
+        sorted_car_num_list = sorted(car_num_list)
+        print(sorted_car_num_list)
+
+        # max_time_list = []
+        # for crossing_id, car_object_list in crossing_car_dict.items():
+        #     max_time = 0
+        #     for car_object in car_object_list:
+        #         cost, min_time_route = self.find_min_time_path_with_dijkstra(car_object)
+        #         if cost > max_time:
+        #             max_time = cost
+        #     max_time_list.append(max_time)
+
+        # print(max_time_list)
+        # print(sum(max_time_list) / len(crossing_car_dict))
 
 
 def min_path_test(config_num=1):
@@ -446,11 +646,40 @@ def min_path_test(config_num=1):
     tm = TrafficManaging('../config_%d/road.txt' % config_num, '../config_%d/car.txt' % config_num,
                          '../config_%d/cross.txt' % config_num)
     print(time.time()-start_time)
+    total_car_time = 0
+    total_crossing_count = 0
     start_time = time.time()
     for car_id in tm.car_id_to_object:
-        tm.find_min_time_path_with_dijkstra(tm.car_id_to_object[car_id])
+        cost, min_time_route = tm.find_min_time_path_with_dijkstra(tm.car_id_to_object[car_id])
+        total_car_time += cost
+        total_crossing_count += len(min_time_route)
+    tm.find_min_time_path_with_dijkstra(tm.car_id_to_object[10001])
+
+    print(time.time() - start_time)
+
+    print(total_car_time)
+    print(total_car_time / len(tm.car_id_to_object))
+
+    print(total_crossing_count)
+    print(total_crossing_count / len(tm.car_id_to_object))
+
+
+def get_res_test(config_num=1):
+    tm = TrafficManaging('../config_%d/road.txt' % config_num, '../config_%d/car.txt' % config_num,
+                         '../config_%d/cross.txt' % config_num)
+    start_time = time.time()
+    tm.get_res()
+    print(time.time() - start_time)
+
+
+def get_res_per_crossing_test(config_num=1):
+    tm = TrafficManaging('../config_%d/road.txt' % config_num, '../config_%d/car.txt' % config_num,
+                         '../config_%d/cross.txt' % config_num)
+    start_time = time.time()
+    tm.get_res_per_crossing()
     print(time.time() - start_time)
 
 
 if __name__ == '__main__':
-    min_path_test(7)
+    # min_path_test(12)
+    get_res_per_crossing_test(13)
