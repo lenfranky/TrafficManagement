@@ -520,6 +520,9 @@ class TrafficManaging(object):
 
         return cost[end_crossing_id], res
 
+    def find_route_vertical_priority(self):
+        pass
+
     def find_min_time_path_with_floyd(self):
         size = len(self.crossing_id_to_object)
         dis = [[-1] * size for i in range(size)]
@@ -540,6 +543,42 @@ class TrafficManaging(object):
                 for road_id in min_time_route:
                     file_write.write(", %d" % road_id)
                 file_write.write(")\n")
+
+        file_write.close()
+
+    def get_res_per_crossing(self, answer_path = 'answer.txt'):
+        file_write = open(answer_path, mode='w')
+
+        start_time = 0
+        for car_id, car_object in self.car_id_to_object.items():
+            if car_object.start_time > start_time:
+                start_time = car_object.start_time
+
+        crossing_car_dict = {}
+        for car_id, car_object in self.car_id_to_object.items():
+            if car_object.start_crossing_id in crossing_car_dict:
+                crossing_car_dict[car_object.start_crossing_id].append(car_object)
+            else:
+                crossing_car_dict[car_object.start_crossing_id] = []
+                crossing_car_dict[car_object.start_crossing_id].append(car_object)
+
+        car_num_list = []
+        for crossing_id, car_object_list in crossing_car_dict.items():
+            car_num_list.append(len(car_object_list))
+        # sorted_car_num_list = sorted(car_num_list)
+
+        curr_time = start_time
+        for crossing_id, car_object_list in crossing_car_dict.items():
+            max_time = 0
+            for car_object in car_object_list:
+                cost, min_time_route = self.find_min_time_path_with_dijkstra(car_object)
+                if cost > max_time:
+                    max_time = cost
+                file_write.write("(%d, %d" % (car_object.car_id, curr_time))
+                for road_id in min_time_route:
+                    file_write.write(", %d" % road_id)
+                file_write.write(")\n")
+            curr_time += max_time / 4
 
         file_write.close()
 
@@ -576,12 +615,35 @@ class TrafficManaging(object):
 
         return root_node
 
+    def show_crossing_array(self, crossing_array):
+        for i in range(len(crossing_array)):
+            for j in range(len(crossing_array[0])):
+                if crossing_array[i][j] is not None:
+                    print(crossing_array[i][j].crossing_id, end='\t')
+                else:
+                    print("N", end='\t')
+            print()
+
+    def get_index_from_array(self, target_crossing_object, crossing_array):
+        if target_crossing_object is None:
+            return None
+        target_crossing_id = target_crossing_object.crossing_id
+        for i in range(len(crossing_array)):
+            for j in range(len(crossing_array[0])):
+                if crossing_array[i][j] is None:
+                    continue
+                if crossing_array[i][j].crossing_id == target_crossing_id:
+                    return [i, j]
+
+        return None
+
     def get_crossing_array(self):
         root_node = self.get_root_node()
         column_count = 0
         row_count = 0
         first_row_node_list = []
         first_column_node_list = []
+        node_placed = []
 
         curr_node = root_node
         while curr_node is not None:
@@ -613,32 +675,98 @@ class TrafficManaging(object):
 
         crossing_array = [[None] * column_count for i in range(row_count)]
         print(crossing_array)
+        crossing_array[0][0] = root_node
 
-    def get_res_per_crossing(self):
-        crossing_car_dict = {}
-        for car_id, car_object in self.car_id_to_object.items():
-            if car_object.start_crossing_id in crossing_car_dict:
-                crossing_car_dict[car_object.start_crossing_id].append(car_object)
-            else:
-                crossing_car_dict[car_object.start_crossing_id] = []
+        node_placed.append(root_node.crossing_id)
+        for i in range(1, len(first_row_node_list)):
+            crossing_array[0][i] = first_row_node_list[i]
+            node_placed.append(first_row_node_list[i].crossing_id)
 
-        car_num_list = []
-        for crossing_id, car_object_list in crossing_car_dict.items():
-            car_num_list.append(len(car_object_list))
-        sorted_car_num_list = sorted(car_num_list)
-        print(sorted_car_num_list)
+        for i in range(1, len(first_column_node_list)):
+            crossing_array[i][0] = first_column_node_list[i]
+            node_placed.append(first_column_node_list[i].crossing_id)
 
-        # max_time_list = []
-        # for crossing_id, car_object_list in crossing_car_dict.items():
-        #     max_time = 0
-        #     for car_object in car_object_list:
-        #         cost, min_time_route = self.find_min_time_path_with_dijkstra(car_object)
-        #         if cost > max_time:
-        #             max_time = cost
-        #     max_time_list.append(max_time)
+        curr_column = 0
+        for first_node in first_row_node_list:
+            curr_row = 1
+            curr_node = first_node.down_crossing_object
+            while curr_node is not None:
+                # print("%d %d" % (curr_row, curr_column))
+                crossing_array[curr_row][curr_column] = curr_node
+                node_placed.append(curr_node.crossing_id)
+                curr_node = curr_node.down_crossing_object
+                curr_row += 1
+            curr_column += 1
 
-        # print(max_time_list)
-        # print(sum(max_time_list) / len(crossing_car_dict))
+        curr_row = 0
+        for first_node in first_column_node_list:
+            curr_column = 1
+            curr_node = first_node.right_crossing_object
+            while curr_node is not None:
+                # print("%d %d" % (curr_row, curr_column))
+                crossing_array[curr_row][curr_column] = curr_node
+                node_placed.append(curr_node.crossing_id)
+                curr_node = curr_node.right_crossing_object
+                curr_column += 1
+            curr_row += 1
+
+        node_placed = set(node_placed)
+
+        node_not_placed = []
+
+        for crossing_id, crossing_object in self.crossing_id_to_object.items():
+            if crossing_id not in node_placed:
+                node_not_placed.append(crossing_object)
+
+        while len(node_not_placed) > 0:
+            node_placed = []
+            for crossing_object in node_not_placed:
+                flag_find_index = False
+                # 如果上方节点已被放置
+                if not flag_find_index:
+                    neighbor_index = self.get_index_from_array(target_crossing_object=crossing_object.up_crossing_object,
+                                                               crossing_array=crossing_array)
+                    if neighbor_index is not None:
+                        node_placed.append(crossing_object)
+                        crossing_array[neighbor_index[0] + 1][neighbor_index[1]] = crossing_object
+                        flag_find_index = True
+
+                # 如果左方节点已被放置
+                if not flag_find_index:
+                    neighbor_index = self.get_index_from_array(target_crossing_object=crossing_object.left_crossing_object,
+                                                               crossing_array=crossing_array)
+                    if neighbor_index is not None:
+                        node_placed.append(crossing_object)
+                        crossing_array[neighbor_index[0]][neighbor_index[1] + 1] = crossing_object
+                        flag_find_index = True
+
+                # 如果右方节点已被放置
+                if not flag_find_index:
+                    neighbor_index = self.get_index_from_array(target_crossing_object=crossing_object.right_crossing_object,
+                                                               crossing_array=crossing_array)
+                    if neighbor_index is not None:
+                        node_placed.append(crossing_object)
+                        crossing_array[neighbor_index[0]][neighbor_index[1] - 1] = crossing_object
+                        flag_find_index = True
+
+                # 如果下方节点已被放置
+                if not flag_find_index:
+                    neighbor_index = self.get_index_from_array(target_crossing_object=crossing_object.up_crossing_object,
+                                                               crossing_array=crossing_array)
+                    if neighbor_index is not None:
+                        node_placed.append(crossing_object)
+                        crossing_array[neighbor_index[0] - 1][neighbor_index[1]] = crossing_object
+                        flag_find_index = True
+
+            for node in node_placed:
+                node_not_placed.remove(node)
+
+        return crossing_array
+
+    def get_res_per_line(self, answer_path = 'answer.txt'):
+        # root_node = self.get_root_node()
+        crossing_array = self.get_crossing_array()
+        self.show_crossing_array(crossing_array)
 
 
 def min_path_test(config_num=1):
@@ -680,6 +808,13 @@ def get_res_per_crossing_test(config_num=1):
     print(time.time() - start_time)
 
 
+def get_res_per_line_test(config_num=1):
+    tm = TrafficManaging('../config_%d/road.txt' % config_num, '../config_%d/car.txt' % config_num,
+                         '../config_%d/cross.txt' % config_num)
+    start_time = time.time()
+    tm.get_res_per_line()
+    print(time.time() - start_time)
+
 if __name__ == '__main__':
-    # min_path_test(12)
-    get_res_per_crossing_test(13)
+    # min_path_test(14)
+    get_res_per_line_test(11)
