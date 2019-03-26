@@ -554,7 +554,7 @@ class TrafficManaging(object):
         :param destination_index:
         :return:1)若找到了路线，则返回路线的list，其中每个元素为所走的道路的id
                 2）若起始节点与目的节点位于同一行，但无法直接到达，则返回False
-                3)在其他情况下，若无法找到路线，则返回None
+                3) 在其他情况下，若无法找到路线，则返回None
         """
         # 记录所走的路线
         route_list = []
@@ -1130,8 +1130,10 @@ def get_route_vertical_priority_test(config_num=1):
 
     # with open('time_list.pkl', mode='wb') as file_write:
     #     dill.dump(time_list, file_write)
-    with open('res_dict.pkl', mode='wb') as file_write:
-        dill.dump(res_dict, file_write)
+    # with open('res_dict.pkl', mode='wb') as file_write:
+    #     dill.dump(res_dict, file_write)
+
+    return tm, res_dict
 
 
 def get_res_test(config_num=1):
