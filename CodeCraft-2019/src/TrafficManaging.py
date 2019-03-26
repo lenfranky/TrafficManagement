@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import time
+import dill
+
 class Road(object):
     def __init__(self, params):
         # 道路id
@@ -193,6 +195,18 @@ class TrafficManaging(object):
         # 建立路口连通性的索引
         self.init_crossing_connectivity()
 
+        # 得到路口的矩阵
+        self.crossing_array = self.get_crossing_array()
+
+        # 得到每个路口上所发出的车的索引
+        self.get_crossing_car_dict = self.get_crossing_car_dict()
+
+        # 得到每个路口对应的在矩阵中的索引
+        self.index_in_crossing_array = self.get_index_in_crossing_array()
+
+        # 记录路线
+        self.route_dict = {}
+
     def load_file(self, road_info_file_path, car_info_file_path, crossing_info_file_path):
         """
         读取文件中的信息
@@ -268,6 +282,15 @@ class TrafficManaging(object):
 
         for crossing_id, crossing_object in self.crossing_id_to_object.items():
             crossing_object.link_to_road_object(self.road_id_to_object)
+
+    def get_crossing_car_dict(self):
+        crossing_car_dict = {}
+        for car_id, car_object in self.car_id_to_object.items():
+            if car_object.start_crossing_id in crossing_car_dict:
+                crossing_car_dict[car_object.start_crossing_id].append(car_object)
+            else:
+                crossing_car_dict[car_object.start_crossing_id] = [car_object]
+        return crossing_car_dict
 
     def has_no_deadlock_in_derict_graph(self):
         """
@@ -520,8 +543,98 @@ class TrafficManaging(object):
 
         return cost[end_crossing_id], res
 
-    def find_route_vertical_priority(self):
-        pass
+    def get_route_vertical_priority_old(self, source_index, destination_index):
+        # source_index = self.index_in_crossing_array[source_crossing_object.crossing_id]
+        # destination_index = self.index_in_crossing_array[destination_crossing_object.crossing_id]
+
+        curr_row_index = source_index[0]
+        curr_column_index = source_index[1]
+
+        if source_index[0] == destination_index[0]:
+            return self.get_route_horizontal(source_index, destination_index)
+
+        if destination_index[0] > source_index[0]:
+            curr_crossing_object = self.crossing_array[source_index[0]][source_index[1]]
+            while (curr_crossing_object is not None) and curr_row_index < destination_index[0]:
+                curr_crossing_object = curr_crossing_object.down_crossing_object
+                if curr_crossing_object is None:
+                    break
+                curr_row_index += 1
+
+            if curr_row_index == destination_index[0]:
+                if self.get_route_horizontal(source_index, destination_index):
+                    return True
+
+            if source_index[1] >= destination_index[1]:
+                start_column_index = 0
+                end_column_index = source_index[1] + 1
+            else:
+                start_column_index = source_index[1]
+                end_column_index = destination_index[1] + 1
+
+            # print("%d - %d" % (start_column_index, end_column_index))
+            row_range_list = list(range(source_index[0], destination_index[0]))
+            row_range_list.reverse()
+            for i in row_range_list:
+                for j in range(start_column_index, end_column_index):
+                    if i == source_index[0] and j == source_index[1]:
+                        continue
+                    mid_node_index = [i, j]
+                    # print(mid_node_index)
+                    if self.get_route_vertical_priority_old(source_index, mid_node_index) is True and self.get_route_vertical_priority_old(mid_node_index, destination_index) is True:
+                        return True
+
+        return 3
+
+    def get_route_dict_list(self):
+        route_dict_array = [[{}] * len(self.crossing_array[0]) for i in range(len(self.crossing_array))]
+
+        width = len(self.crossing_array)
+        hight = len(self.crossing_array[0])
+
+        x_list = list(range(width))
+        y_list = list(range(hight))
+        x_list.reverse()
+        y_list.reverse()
+
+        for x in x_list:
+            for y in y_list:
+                source_crossing_object = self.crossing_array[x][y]
+
+                i_list = list(range(x, width))
+                j_list = list(range(y, hight))
+                for i in i_list:
+                    for j in j_list:
+                        if i < x or j < y:
+                            continue
+                        route_dict_array[x][y][(i, j)] = self.get_route_vertical_priority((x, y), (i, j), route_dict_array)
+
+    def get_route_vertical_priority(self, source_index, destination_index, route_dict_array):
+        if source_index[0] <= destination_index[0]:
+            pass
+        return True
+
+    def get_route_horizontal(self, source_index, destination_index):
+        if source_index[1] == destination_index[1]:
+            return True
+        curr_column_index = source_index[1]
+        curr_crossing_object = self.crossing_array[destination_index[0]][source_index[1]]
+        if source_index[1] < destination_index[1]:
+            while (curr_crossing_object is not None) and curr_column_index < destination_index[1]:
+                curr_crossing_object = curr_crossing_object.right_crossing_object
+                if curr_crossing_object is None:
+                    break
+                curr_column_index += 1
+
+        else:
+            while (curr_crossing_object is not None) and curr_column_index < destination_index[1]:
+                curr_crossing_object = curr_crossing_object.left_crossing_object
+                if curr_crossing_object is None:
+                    break
+                curr_column_index -= 1
+
+        if curr_column_index == destination_index[1]:
+            return True
 
     def find_min_time_path_with_floyd(self):
         size = len(self.crossing_id_to_object)
@@ -559,8 +672,7 @@ class TrafficManaging(object):
             if car_object.start_crossing_id in crossing_car_dict:
                 crossing_car_dict[car_object.start_crossing_id].append(car_object)
             else:
-                crossing_car_dict[car_object.start_crossing_id] = []
-                crossing_car_dict[car_object.start_crossing_id].append(car_object)
+                crossing_car_dict[car_object.start_crossing_id] = [car_object]
 
         car_num_list = []
         for crossing_id, car_object_list in crossing_car_dict.items():
@@ -624,7 +736,8 @@ class TrafficManaging(object):
                     print("N", end='\t')
             print()
 
-    def get_index_from_array(self, target_crossing_object, crossing_array):
+
+    def get_index_from_input_array(self, target_crossing_object, crossing_array):
         if target_crossing_object is None:
             return None
         target_crossing_id = target_crossing_object.crossing_id
@@ -637,7 +750,25 @@ class TrafficManaging(object):
 
         return None
 
+    def get_index_in_crossing_array(self):
+        """
+        得到每个路口在路口的矩阵中的索引的map
+        :return: crossing_index_in_crossing_array
+        """
+        crossing_index_in_crossing_array = {}
+
+        for i in range(len(self.crossing_array)):
+            for j in range(len(self.crossing_array[0])):
+                crossing_index_in_crossing_array[self.crossing_array[i][j].crossing_id] = (i, j)
+
+        return crossing_index_in_crossing_array
+
+
     def get_crossing_array(self):
+        """
+        获取一个矩阵，其中按照路口的实际位置记录所有的路口
+        :return:
+        """
         root_node = self.get_root_node()
         column_count = 0
         row_count = 0
@@ -674,7 +805,7 @@ class TrafficManaging(object):
                 column_count = count
 
         crossing_array = [[None] * column_count for i in range(row_count)]
-        print(crossing_array)
+        # print(crossing_array)
         crossing_array[0][0] = root_node
 
         node_placed.append(root_node.crossing_id)
@@ -724,8 +855,9 @@ class TrafficManaging(object):
                 flag_find_index = False
                 # 如果上方节点已被放置
                 if not flag_find_index:
-                    neighbor_index = self.get_index_from_array(target_crossing_object=crossing_object.up_crossing_object,
-                                                               crossing_array=crossing_array)
+                    neighbor_index = self.get_index_from_input_array(
+                        target_crossing_object=crossing_object.up_crossing_object,
+                        crossing_array=crossing_array)
                     if neighbor_index is not None:
                         node_placed.append(crossing_object)
                         crossing_array[neighbor_index[0] + 1][neighbor_index[1]] = crossing_object
@@ -733,8 +865,9 @@ class TrafficManaging(object):
 
                 # 如果左方节点已被放置
                 if not flag_find_index:
-                    neighbor_index = self.get_index_from_array(target_crossing_object=crossing_object.left_crossing_object,
-                                                               crossing_array=crossing_array)
+                    neighbor_index = self.get_index_from_input_array(
+                        target_crossing_object=crossing_object.left_crossing_object,
+                        crossing_array=crossing_array)
                     if neighbor_index is not None:
                         node_placed.append(crossing_object)
                         crossing_array[neighbor_index[0]][neighbor_index[1] + 1] = crossing_object
@@ -742,8 +875,9 @@ class TrafficManaging(object):
 
                 # 如果右方节点已被放置
                 if not flag_find_index:
-                    neighbor_index = self.get_index_from_array(target_crossing_object=crossing_object.right_crossing_object,
-                                                               crossing_array=crossing_array)
+                    neighbor_index = self.get_index_from_input_array(
+                        target_crossing_object=crossing_object.right_crossing_object,
+                        crossing_array=crossing_array)
                     if neighbor_index is not None:
                         node_placed.append(crossing_object)
                         crossing_array[neighbor_index[0]][neighbor_index[1] - 1] = crossing_object
@@ -751,8 +885,9 @@ class TrafficManaging(object):
 
                 # 如果下方节点已被放置
                 if not flag_find_index:
-                    neighbor_index = self.get_index_from_array(target_crossing_object=crossing_object.up_crossing_object,
-                                                               crossing_array=crossing_array)
+                    neighbor_index = self.get_index_from_input_array(
+                        target_crossing_object=crossing_object.up_crossing_object,
+                        crossing_array=crossing_array)
                     if neighbor_index is not None:
                         node_placed.append(crossing_object)
                         crossing_array[neighbor_index[0] - 1][neighbor_index[1]] = crossing_object
@@ -763,10 +898,48 @@ class TrafficManaging(object):
 
         return crossing_array
 
-    def get_res_per_line(self, answer_path = 'answer.txt'):
-        # root_node = self.get_root_node()
+    def get_res_per_line_with_min_time_cost_path(self, answer_path = 'answer.txt'):
+        """
+        以迪杰斯特拉算法获取每辆车从起始路口到终点路口的路径，每次发车的时候，发一整行的路口
+        :param answer_path:
+        :return:
+        """
+        file_write = open(answer_path, mode='w')
+
+        start_time = 0
+        for car_id, car_object in self.car_id_to_object.items():
+            if car_object.start_time > start_time:
+                start_time = car_object.start_time
+
+        crossing_car_dict = {}
+        for car_id, car_object in self.car_id_to_object.items():
+            if car_object.start_crossing_id in crossing_car_dict:
+                crossing_car_dict[car_object.start_crossing_id].append(car_object)
+            else:
+                crossing_car_dict[car_object.start_crossing_id] = [car_object]
+
         crossing_array = self.get_crossing_array()
-        self.show_crossing_array(crossing_array)
+
+        curr_time = start_time
+        for crossing_object_list in crossing_array:
+            max_time = 0
+            for crossing_object in crossing_object_list:
+                car_object_list = crossing_car_dict[crossing_object.crossing_id]
+                for car_object in car_object_list:
+                    cost, min_time_route = self.find_min_time_path_with_dijkstra(car_object)
+                    if cost > max_time:
+                        max_time = cost
+                    file_write.write("(%d, %d" % (car_object.car_id, curr_time))
+                    for road_id in min_time_route:
+                        file_write.write(", %d" % road_id)
+                    file_write.write(")\n")
+            curr_time += max_time
+
+    def get_res_per_line(self, answer_path = 'answer.txt'):
+        file_write = open(answer_path, mode='w')
+        self.show_crossing_array(self.crossing_array)
+
+
 
 
 def min_path_test(config_num=1):
@@ -790,6 +963,49 @@ def min_path_test(config_num=1):
 
     print(total_crossing_count)
     print(total_crossing_count / len(tm.car_id_to_object))
+
+
+def get_route_vertical_priority_test_one_car(config_num=1):
+    start_time = time.time()
+    tm = TrafficManaging('../config_%d/road.txt' % config_num, '../config_%d/car.txt' % config_num,
+                         '../config_%d/cross.txt' % config_num)
+    print(time.time()-start_time)
+    total_car_time = 0
+    total_crossing_count = 0
+    start_time = time.time()
+    print(tm.get_route_vertical_priority([0, 0], [1, 3]))
+    print(time.time() - start_time)
+
+
+def get_route_vertical_priority_test(config_num=1):
+    start_time = time.time()
+    tm = TrafficManaging('../config_%d/road.txt' % config_num, '../config_%d/car.txt' % config_num,
+                         '../config_%d/cross.txt' % config_num)
+    print(time.time()-start_time)
+    total_car_time = 0
+    total_crossing_count = 0
+    start_time = time.time()
+
+    res_dict = {True: 0, False: 0, 3: 0, None: 0}
+
+    time_list = []
+
+    for car_id, car_object in tm.car_id_to_object.items():
+        source_index = tm.index_in_crossing_array[tm.crossing_id_to_object[car_object.start_crossing_id].crossing_id]
+        destination_index = tm.index_in_crossing_array[tm.crossing_id_to_object[car_object.end_crossing_id].crossing_id]
+
+        start_time_inner = time.time()
+        res = tm.get_route_vertical_priority_old(source_index=source_index, destination_index=destination_index)
+        time_list.append((car_id, time.time() - start_time_inner))
+
+        res_dict[res] += 1
+
+    print(res_dict)
+    tm.get_route_dict_list()
+    print(time.time() - start_time)
+
+    with open('time_list.pkl', mode='wb') as file_write:
+        dill.dump(time_list, file_write)
 
 
 def get_res_test(config_num=1):
@@ -817,4 +1033,5 @@ def get_res_per_line_test(config_num=1):
 
 if __name__ == '__main__':
     # min_path_test(14)
-    get_res_per_line_test(11)
+    get_route_vertical_priority_test(31)
+    # get_res_per_line_test(11)
