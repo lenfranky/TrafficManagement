@@ -1,5 +1,6 @@
 import dill
 
+
 with open(r'C:\Users\LenFranky\OneDrive\codes\TrafficManagement\CodeCraft-2019\src\time_list.pkl', mode='rb') as file_read:
     time_list = dill.load(file_read)
 
