@@ -999,7 +999,9 @@ class TrafficManaging(object):
 
         # print(line_index_list)
 
+        line_count = 0
         for line_index in line_index_list:
+            line_count += 1
             crossing_line = self.crossing_array[line_index]
             max_time_cost_line = 0
             for crossing_object in crossing_line:
@@ -1021,7 +1023,10 @@ class TrafficManaging(object):
                 for car_object in arranged_car_list:
                     self.crossing_car_dict[crossing_object.crossing_id].remove(car_object)
                     self.car_id_to_object.pop(car_object.car_id)
-            curr_time += max_time_cost_line * 1 / 1
+            if line_count % 2 == 0:
+                curr_time += max_time_cost_line * 1 / 1
+            else:
+                curr_time += max_time_cost_line * 1 / 1
 
         # curr_time = start_time
         for crossing_id, car_object_list in self.crossing_car_dict.items():
@@ -1616,4 +1621,4 @@ if __name__ == '__main__':
     # get_route_vertical_priority_test(14)
     # get_route_vertical_priority_per_crossing_test(14)
     # get_res_per_direction_test(14)
-    get_res_per_crossing_line_test(13)
+    get_res_per_crossing_line_test(11)
