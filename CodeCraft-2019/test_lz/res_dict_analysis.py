@@ -967,7 +967,9 @@ class TrafficManaging(object):
 
 
 if __name__ == '__main__':
-    with open(r'C:\Users\LenFranky\OneDrive\codes\TrafficManagement\CodeCraft-2019\src\res_dict.pkl', mode='rb') as file_read:
+    path = r'C:\Users\32779\OneDrive\codes\TrafficManagement\CodeCraft-2019\src\res_dict.pkl'
+    path = r'C:\Users\LenFranky\OneDrive\codes\TrafficManagement\CodeCraft-2019\src\res_dict.pkl'
+    with open(path, mode='rb') as file_read:
         res_dict = dill.load(file_read)
 
     config_num = 11
@@ -990,3 +992,7 @@ if __name__ == '__main__':
     # print(crossing_object.down_crossing_object.crossing_id)
     # print(crossing_object.left_crossing_object.crossing_id)
     # print(crossing_object.left_road_object.road_id)
+
+    # for car_id in res_dict[3]:
+    #     car_object = tm.car_id_to_object[car_id]
+    #     print("%d:\t%d -> %d" % (car_id, tm.car_id_to_object[car_id].start_crossing_id, tm.car_id_to_object[car_id].end_crossing_id))

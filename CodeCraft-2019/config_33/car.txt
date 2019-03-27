@@ -1,0 +1,2 @@
+#(id,from,to,speed,planTime)
+(10088, 23, 21, 4, 20)

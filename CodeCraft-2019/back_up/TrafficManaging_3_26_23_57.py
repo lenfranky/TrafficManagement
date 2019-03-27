@@ -207,6 +207,9 @@ class TrafficManaging(object):
         # 记录路线
         self.route_dict = {}
 
+        # 记录中间节点的集合
+        self.mid_node_set = set()
+
     def load_file(self, road_info_file_path, car_info_file_path, crossing_info_file_path):
         """
         读取文件中的信息
@@ -556,6 +559,7 @@ class TrafficManaging(object):
                 2）若起始节点与目的节点位于同一行，但无法直接到达，则返回False
                 3) 在其他情况下，若无法找到路线，则返回None
         """
+        print("%d -> %d" % (self.crossing_array[source_index[0]][source_index[1]].crossing_id, self.crossing_array[destination_index[0]][destination_index[1]].crossing_id))
         # 记录所走的路线
         route_list = []
 
@@ -614,16 +618,24 @@ class TrafficManaging(object):
                 end_column_index = destination_index[1] + 1
                 column_range_list = list(range(start_column_index, end_column_index))
 
-            # print("%d - %d" % (start_column_index, end_column_index))
+            # print("%d -> %d" % (start_column_index, end_column_index))
             row_range_list = list(range(source_index[0], curr_row_index + 1))
             row_range_list.reverse()
 
             # 不断地寻找中间点，并根据中间点进行判断
             for i in row_range_list:
                 for j in column_range_list:
+                    if self.can_reach_horizontal((i, j), (i, source_index[1])):
+                        pass
+                    else:
+                        break
                     if i == source_index[0] and j == source_index[1]:
                         continue
-                    mid_node_index = [i, j]
+                    mid_node_index = (i, j)
+                    if mid_node_index in self.mid_node_set:
+                        continue
+                    else:
+                        self.mid_node_set.add(mid_node_index)
                     # 若当前选择中间节点的行位于目的节点所在的行
                     if i == destination_index[0]:
                         route_midnode_destination = self.get_route_horizontal(mid_node_index, destination_index)
@@ -676,9 +688,17 @@ class TrafficManaging(object):
             row_range_list = list(range(curr_row_index, source_index[0] + 1))
             for i in row_range_list:
                 for j in column_range_list:
+                    if self.can_reach_horizontal((i, j), (i, source_index[1])):
+                        pass
+                    else:
+                        break
                     if i == source_index[0] and j == source_index[1]:
                         continue
-                    mid_node_index = [i, j]
+                    mid_node_index = (i, j)
+                    if mid_node_index in self.mid_node_set:
+                        continue
+                    else:
+                        self.mid_node_set.add(mid_node_index)
                     if i == destination_index[0]:
                         route_midnode_destination = self.get_route_horizontal(mid_node_index, destination_index)
                         condition_1 = (source_index[1] < destination_index[1] and j < curr_column_index) or (
@@ -688,7 +708,7 @@ class TrafficManaging(object):
                             route_from_source.extend(route_midnode_destination)
                             return route_from_source
                     else:
-                        # print(self.crossing_array[i][j].crossing_id)
+                        print(self.crossing_array[i][j].crossing_id)
                         res_first = self.get_route_vertical(source_index, mid_node_index)
                         res_last = self.get_route_vertical(mid_node_index, destination_index)
                         if (type(res_first)is list) and (type(res_last)is list):
@@ -735,6 +755,36 @@ class TrafficManaging(object):
         if source_index[0] <= destination_index[0]:
             pass
         return True
+
+    def can_reach_horizontal(self, source_index, destination_index):
+        if source_index[0] != destination_index[0]:
+            print("Wrong Row Index!")
+            return False
+        if source_index[1] == destination_index[1]:
+            return True
+
+        if source_index[1] < destination_index[1]:
+            curr_node = self.crossing_array[source_index[0]][source_index[1]]
+            curr_column = source_index[1]
+            while curr_column < destination_index[1] and curr_node is not None:
+                curr_node = curr_node.right_crossing_object
+                if curr_node is None:
+                    break
+                curr_column += 1
+
+        else:
+            curr_node = self.crossing_array[source_index[0]][source_index[1]]
+            curr_column = source_index[1]
+            while curr_column > destination_index[1] and curr_node is not None:
+                curr_node = curr_node.left_crossing_object
+                if curr_node is None:
+                    break
+                curr_column -= 1
+
+        if curr_column == destination_index[1]:
+            return True
+        else:
+            return False
 
     def get_route_horizontal(self, source_index, destination_index):
         route_list = []
@@ -1216,6 +1266,7 @@ def get_route_vertical_priority_test(config_num=1):
         destination_index = tm.index_in_crossing_array[tm.crossing_id_to_object[car_object.end_crossing_id].crossing_id]
 
         start_time_inner = time.time()
+        tm.mid_node_set.clear()
         res = tm.get_route_vertical(source_index=source_index, destination_index=destination_index)
         time_list.append((car_id, time.time() - start_time_inner))
 
@@ -1242,6 +1293,11 @@ def get_route_vertical_priority_test(config_num=1):
         dill.dump(res_dict, file_write)
 
     return tm, res_dict
+
+def can_reach_test(config_num=33):
+    tm = TrafficManaging('../config_%d/road.txt' % config_num, '../config_%d/car.txt' % config_num,
+                         '../config_%d/cross.txt' % config_num)
+    print(tm.can_reach_horizontal(tm.index_in_crossing_array[23], tm.index_in_crossing_array[53]))
 
 
 def get_route_vertical_priority_per_crossing_test(config_num=1):
@@ -1305,7 +1361,8 @@ def get_res_per_crossing_line_test(config_num=1):
 
 if __name__ == '__main__':
     # min_path_test(14)
-    get_route_vertical_priority_test(13)
+    # can_reach_test(13)
+    get_route_vertical_priority_test(11)
     # get_route_vertical_priority_per_crossing_test(13)
     # get_res_per_crossing_line_test(11)
     # get_res_per_line_test(11)
