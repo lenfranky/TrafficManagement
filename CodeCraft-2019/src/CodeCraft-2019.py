@@ -204,19 +204,25 @@ class TrafficManaging(object):
         self.init_crossing_connectivity()
 
         # 得到路口的矩阵
-        self.crossing_array = self.get_crossing_array()
+        # self.crossing_array = self.get_crossing_array()
+        self.crossing_array = []
+
 
         # 得到每个路口上所发出的车的索引
         self.crossing_car_dict = self.get_crossing_car_dict()
 
         # 得到每个路口对应的在矩阵中的索引
-        self.index_in_crossing_array = self.get_index_in_crossing_array()
+        # self.index_in_crossing_array = self.get_index_in_crossing_array()
+        self.index_in_crossing_array = {}
 
         # 记录路线
         self.route_dict = {}
 
         # 记录中间节点的集合
         self.mid_node_set = set()
+
+        # 得到弗洛伊德算法的矩阵
+        self.floyed_route_dict = self.get_floyed_route_dict()
 
     def load_file(self, road_info_file_path, car_info_file_path, crossing_info_file_path):
         """
@@ -799,7 +805,289 @@ class TrafficManaging(object):
                             return res_first
         return 3
 
+    def get_route_list_vertical(self, source_index, destination_index, is_frist_line_mid_node=False):
+        """
+        按照先纵向再横向的规则获得路线
+        :param source_index:
+        :param destination_index:
+        :param is_frist_line_mid_node:
+        :return:1)若找到了路线，则返回路线的list，其中每个元素为所走的道路的id
+                2）若起始节点与目的节点位于同一行，但无法直接到达，则返回False
+                3) 在其他情况下，若无法找到路线，则返回None
+        """
+        # print("%d -> %d" % (self.crossing_array[source_index[0]][source_index[1]].crossing_id, self.crossing_array[destination_index[0]][destination_index[1]].crossing_id))
+        # 所有可行的路线
+        res = []
+        # 记录所走的路线
+        route_list = []
+
+        # 在遍历的过程中记录当前所在的行索引
+        curr_row_index = source_index[0]
+        # 在遍历的过程中记录当前所在的列索引
+        curr_column_index = source_index[1]
+
+        # 如果当前已经在同一行，则直接进行判断
+        if source_index[0] == destination_index[0]:
+            route_horizontal = self.get_route_horizontal(source_index, destination_index)
+            # 如果获得了结果，则直接返回得到的路线
+            if type(route_horizontal) is list:
+                if type(res) is list:
+                    res.append(route_horizontal)
+                    return
+            # 否则，说明起始节点与目的节点在同一行，但并不能直达
+            # 此时，返回False
+            else:
+                return False
+
+        # 若目的节点在源节点的上方，即车辆需要先往下走
+        if destination_index[0] > source_index[0]:
+            # 获取当前节点，用于遍历
+            curr_crossing_object = self.crossing_array[source_index[0]][source_index[1]]
+            # 先不断向下遍历，知道到达目的行，或者不能再往下，记录当前的行索引
+            while (curr_crossing_object is not None) and curr_row_index < destination_index[0]:
+                route_list.append(curr_crossing_object.down_road_id)
+                curr_crossing_object = curr_crossing_object.down_crossing_object
+                if curr_crossing_object is None:
+                    break
+                curr_row_index += 1
+
+            # 如果已经到达了目的节点所在的行，则再该行进行判断
+            if curr_row_index == destination_index[0]:
+                route_midnode_destination = self.get_route_horizontal((curr_row_index, source_index[1]), destination_index)
+                # 如果在该行可以横向到达，则输出结果
+                if type(route_midnode_destination) is list:
+                    route_list.extend(route_midnode_destination)
+                    return route_list
+                curr_column_index = route_midnode_destination
+
+            # 若在以上的几种情况下，都不能获得路线，则寻找中间节点进行辅助
+            # 用迭代的方法来进行判断是否可以到达
+            # 判断方式为：源节点是否能到达中间节点 AND 中间节点是否能到达目的节点
+            # 而为了进行上面的两个判断，可能又需要更多的中间节点进行辅助
+
+            # 首先需要获得中间点的选取范围
+            # 若源节点在目的节点的右边，则列的选择的范围
+            if source_index[1] >= destination_index[1]:
+                start_column_index = destination_index[1]
+                end_column_index = source_index[1] + 1
+                column_range_list = list(range(start_column_index, end_column_index))
+                column_range_list.reverse()
+                rest_column_range_list = list(range(0, len(self.crossing_array[0])))
+                rest_column_range_list.reverse()
+            else:
+                start_column_index = source_index[1]
+                end_column_index = destination_index[1] + 1
+                column_range_list = list(range(start_column_index, end_column_index))
+                rest_column_range_list = list(range(0, len(self.crossing_array[0])))
+
+            # print("%d -> %d" % (start_column_index, end_column_index))
+            if is_frist_line_mid_node:
+                row_range_list = list(range(source_index[0] + 1, curr_row_index + 1))
+                row_range_list.reverse()
+            else:
+                row_range_list = list(range(source_index[0], curr_row_index + 1))
+                row_range_list.reverse()
+
+
+            # 不断地寻找中间点，并根据中间点进行判断
+            for i in row_range_list:
+                for j in column_range_list:
+                    if self.can_reach_horizontal((i, source_index[1]), (i, j)):
+                        pass
+                    else:
+                        continue
+                    if i == source_index[0] and j == source_index[1]:
+                        continue
+                    mid_node_index = (i, j)
+                    if mid_node_index in self.mid_node_set:
+                        continue
+                    else:
+                        self.mid_node_set.add(mid_node_index)
+                    # 若当前选择中间节点的行位于目的节点所在的行
+                    if i == destination_index[0]:
+                        route_midnode_destination = self.get_route_horizontal(mid_node_index, destination_index)
+                        # 为了防止产生循环迭代，因此这里的第一个条件是用索引来辅助进行判断，而不是直接调用函数
+                        # 因为既然i == destination_index[0]，说明已经到了目的节点所在的行
+                        # 因此可以根据curr_column来进行判断
+                        condition_1 = (source_index[1] < destination_index[1] and j < curr_column_index) or (
+                                    source_index[1] > destination_index[1] and j > curr_column_index)
+                        if condition_1 and (type(route_midnode_destination) is list):
+                            route_from_source = self.get_route_list_vertical(source_index, mid_node_index, i == source_index[0])
+                            for route_iter in route_from_source:
+                                route_first_iter = copy.copy(route_iter)
+                                route_first_iter.extend(route_midnode_destination)
+                                res.append(route_first_iter)
+                    else:
+                        # print(self.crossing_array[i][j].crossing_id) i == source_index[0]
+                        res_first = self.get_route_list_vertical(source_index, mid_node_index, i == source_index[0])
+                        res_last = self.get_route_list_vertical(mid_node_index, destination_index, i == source_index[0])
+                        if (len(res_first) > 0) and (len(res_last) > 0):
+                            for res_first_iter in res_first:
+                                for res_last_iter in res_last:
+                                    res_first_part = copy.copy(res_first_iter)
+                                    res_last_part = copy.copy(res_last_iter)
+                                    res_first_part.extend(res_last_part)
+                                    res.append(res_first_part)
+                for j in rest_column_range_list:
+                    # print("crossing_id:%d" % self.crossing_array[i][j].crossing_id)
+                    if self.can_reach_horizontal((i, source_index[1]), (i, j)):
+                        pass
+                    else:
+                        continue
+                    if i == source_index[0] and j == source_index[1]:
+                        continue
+                    mid_node_index = (i, j)
+                    if mid_node_index in self.mid_node_set:
+                        continue
+                    else:
+                        self.mid_node_set.add(mid_node_index)
+                    # 若当前选择中间节点的行位于目的节点所在的行
+                    if i == destination_index[0]:
+                        route_midnode_destination = self.get_route_horizontal(mid_node_index, destination_index)
+                        # 为了防止产生循环迭代，因此这里的第一个条件是用索引来辅助进行判断，而不是直接调用函数
+                        # 因为既然i == destination_index[0]，说明已经到了目的节点所在的行
+                        # 因此可以根据curr_column来进行判断
+                        condition_1 = (source_index[1] < destination_index[1] and j < curr_column_index) or (
+                                    source_index[1] > destination_index[1] and j > curr_column_index)
+                        if condition_1 and (type(route_midnode_destination) is list):
+                            route_from_source = self.get_route_list_vertical(source_index, mid_node_index, i == source_index[0])
+                            for route_iter in route_from_source:
+                                route_first_iter = copy.copy(route_iter)
+                                route_first_iter.extend(route_midnode_destination)
+                                res.append(route_first_iter)
+                    else:
+                        # print(self.crossing_array[i][j].crossing_id)
+                        res_first = self.get_route_list_vertical(source_index, mid_node_index, i == source_index[0])
+                        res_last = self.get_route_list_vertical(mid_node_index, destination_index, i == source_index[0])
+                        if (len(res_first) > 0) and (len(res_last) > 0):
+                            for res_first_iter in res_first:
+                                for res_last_iter in res_last:
+                                    res_first_part = copy.copy(res_first_iter)
+                                    res_last_part = copy.copy(res_last_iter)
+                                    res_first_part.extend(res_last_part)
+                                    res.append(res_first_part)
+
+        # 若目的节点在源节点的下方，即车辆需要先往上走
+        else:
+            curr_crossing_object = self.crossing_array[source_index[0]][source_index[1]]
+            while (curr_crossing_object is not None) and curr_row_index > destination_index[0]:
+                route_list.append(curr_crossing_object.up_road_id)
+                curr_crossing_object = curr_crossing_object.up_crossing_object
+                if curr_crossing_object is None:
+                    break
+                curr_row_index -= 1
+
+            if curr_row_index == destination_index[0]:
+                route_midnode_destination = self.get_route_horizontal((curr_row_index, source_index[1]),
+                                                                      destination_index)
+                if type(route_midnode_destination) is list:
+                    route_list.extend(route_midnode_destination)
+                    res.append(route_list)
+                curr_column_index = route_midnode_destination
+
+            if source_index[1] >= destination_index[1]:
+                start_column_index = destination_index[1]
+                end_column_index = source_index[1] + 1
+                column_range_list = list(range(start_column_index, end_column_index))
+                column_range_list.reverse()
+                rest_column_range_list = list(range(0, len(self.crossing_array[0])))
+                rest_column_range_list.reverse()
+            else:
+                start_column_index = source_index[1]
+                end_column_index = destination_index[1] + 1
+                column_range_list = list(range(start_column_index, end_column_index))
+                rest_column_range_list = list(range(0, len(self.crossing_array[0])))
+
+            # print("%d - %d" % (start_column_index, end_column_index))
+            if is_frist_line_mid_node:
+                row_range_list = list(range(curr_row_index, source_index[0]))
+            else:
+                row_range_list = list(range(curr_row_index, source_index[0] + 1))
+            for i in row_range_list:
+                # print("i:%d" % i)
+                for j in column_range_list:
+                    # print(self.crossing_array[i][j].crossing_id)
+                    if self.can_reach_horizontal((i, source_index[1]), (i, j)):
+                        pass
+                    else:
+                        continue
+                    if i == source_index[0] and j == source_index[1]:
+                        continue
+                    mid_node_index = (i, j)
+                    if mid_node_index in self.mid_node_set:
+                        continue
+                    else:
+                        self.mid_node_set.add(mid_node_index)
+                    if i == destination_index[0]:
+                        route_midnode_destination = self.get_route_horizontal(mid_node_index, destination_index)
+                        condition_1 = (source_index[1] < destination_index[1] and j < curr_column_index) or (
+                                    source_index[1] > destination_index[1] and j > curr_column_index)
+                        if condition_1 and (type(route_midnode_destination) is list):
+                            route_from_source = self.get_route_vertical(source_index, mid_node_index, i == source_index[0])
+                            for route_iter in route_from_source:
+                                route_first_iter = copy.copy(route_iter)
+                                route_first_iter.extend(route_midnode_destination)
+                                res.append(route_first_iter)
+                    else:
+                        # print(self.crossing_array[i][j].crossing_id)
+                        res_first = self.get_route_vertical(source_index, mid_node_index, i == source_index[0])
+                        res_last = self.get_route_vertical(mid_node_index, destination_index, i == source_index[0])
+                        if (len(res_first) > 0) and (len(res_last) > 0):
+                            for res_first_iter in res_first:
+                                for res_last_iter in res_last:
+                                    res_first_part = copy.copy(res_first_iter)
+                                    res_last_part = copy.copy(res_last_iter)
+                                    res_first_part.extend(res_last_part)
+                                    res.append(res_first_part)
+                for j in rest_column_range_list:
+                    if self.can_reach_horizontal((i, source_index[1]), (i, j)):
+                        pass
+                    else:
+                        continue
+                    if i == source_index[0] and j == source_index[1]:
+                        continue
+                    mid_node_index = (i, j)
+                    if mid_node_index in self.mid_node_set:
+                        continue
+                    else:
+                        self.mid_node_set.add(mid_node_index)
+                    if i == destination_index[0]:
+                        route_midnode_destination = self.get_route_horizontal(mid_node_index, destination_index)
+                        condition_1 = (source_index[1] < destination_index[1] and j < curr_column_index) or (
+                                    source_index[1] > destination_index[1] and j > curr_column_index)
+                        if condition_1 and (type(route_midnode_destination) is list):
+                            route_from_source = self.get_route_vertical(source_index, mid_node_index, i == source_index[0])
+                            for route_iter in route_from_source:
+                                route_first_iter = copy.copy(route_iter)
+                                route_first_iter.extend(route_midnode_destination)
+                                res.append(route_first_iter)
+                    else:
+                        # print(self.crossing_array[i][j].crossing_id)
+                        res_first = self.get_route_list_vertical(source_index, mid_node_index, i == source_index[0])
+                        res_last = self.get_route_list_vertical(mid_node_index, destination_index, i == source_index[0])
+                        if (len(res_first) > 0) and (len(res_last) > 0):
+                            for res_first_iter in res_first:
+                                for res_last_iter in res_last:
+                                    res_first_part = copy.copy(res_first_iter)
+                                    res_last_part = copy.copy(res_last_iter)
+                                    res_first_part.extend(res_last_part)
+                                    res.append(res_first_part)
+        return 3
+
     def get_route_vertical_then_horizontal(self, car_object):
+        self.mid_node_set.clear()
+        source_index = self.index_in_crossing_array[self.crossing_id_to_object[car_object.start_crossing_id].crossing_id]
+        destination_index = self.index_in_crossing_array[self.crossing_id_to_object[car_object.end_crossing_id].crossing_id]
+
+        route = self.get_route_vertical(source_index=source_index, destination_index=destination_index)
+
+        if type(route) is list:
+            cost = self.get_route_cost_time(car_object, route_list=route)
+            return cost, route
+        else:
+            return None
+
+    def get_route_vertical_then_horizontal_with_all_return(self, car_object):
         self.mid_node_set.clear()
         source_index = self.index_in_crossing_array[self.crossing_id_to_object[car_object.start_crossing_id].crossing_id]
         destination_index = self.index_in_crossing_array[self.crossing_id_to_object[car_object.end_crossing_id].crossing_id]
@@ -899,6 +1187,158 @@ class TrafficManaging(object):
         else:
             return curr_column_index
 
+    def move_then_get_route(self, car_object):
+        start_crossing_coordinate = self.index_in_crossing_array[car_object.start_crossing_id]
+        end_crossing_coordinate = self.index_in_crossing_array[car_object.end_crossing_id]
+        route = []
+        if start_crossing_coordinate[0] == end_crossing_coordinate[0]:
+            if start_crossing_coordinate[1] < end_crossing_coordinate[1]:
+                row_list = list(range(0, start_crossing_coordinate[0]))
+                row_list.reverse()
+                column_list = list(range(start_crossing_coordinate[1], len(self.crossing_array[1])))
+
+                for i in row_list:
+                    for j in column_list:
+                        self.mid_node_set.clear()
+                        res_first = self.get_route_vertical(start_crossing_coordinate, (i, j))
+                        self.mid_node_set.clear()
+                        res_last = self.get_route_vertical((i, j), end_crossing_coordinate)
+                        if type(res_first) is list and type(res_last) is list:
+                            for road_id in res_first:
+                                if road_id in res_last:
+                                    continue
+                            route = res_first
+                            route.extend(res_last)
+                            return route
+
+                column_list = list(range(0, start_crossing_coordinate[1]))
+                for i in row_list:
+                    for j in column_list:
+                        self.mid_node_set.clear()
+                        res_first = self.get_route_vertical(start_crossing_coordinate, (i, j))
+                        self.mid_node_set.clear()
+                        res_last = self.get_route_vertical((i, j), end_crossing_coordinate)
+                        if type(res_first) is list and type(res_last) is list:
+                            for road_id in res_first:
+                                if road_id in res_last:
+                                    continue
+                            route = res_first
+                            route.extend(res_last)
+                            return route
+            else:
+                row_list = list(range(start_crossing_coordinate[0] + 1, len(self.crossing_array)))
+                column_list = list(range(0, start_crossing_coordinate[1] + 1))
+                column_list.reverse()
+                for i in row_list:
+                    for j in column_list:
+                        self.mid_node_set.clear()
+                        res_first = self.get_route_vertical(start_crossing_coordinate, (i, j))
+                        self.mid_node_set.clear()
+                        res_last = self.get_route_vertical((i, j), end_crossing_coordinate)
+                        if type(res_first) is list and type(res_last) is list:
+                            for road_id in res_first:
+                                if road_id in res_last:
+                                    continue
+                            route = res_first
+                            route.extend(res_last)
+                            return route
+
+                column_list = list(range(start_crossing_coordinate[1] + 1, len(self.crossing_array[0])))
+                for i in row_list:
+                    for j in column_list:
+                        self.mid_node_set.clear()
+                        res_first = self.get_route_vertical(start_crossing_coordinate, (i, j))
+                        self.mid_node_set.clear()
+                        res_last = self.get_route_vertical((i, j), end_crossing_coordinate)
+                        if type(res_first) is list and type(res_last) is list:
+                            for road_id in res_first:
+                                if road_id in res_last:
+                                    continue
+                            route = res_first
+                            route.extend(res_last)
+                            return route
+
+        else:
+
+            if start_crossing_coordinate[1] < end_crossing_coordinate[1]:
+                row_list = list(range(0, start_crossing_coordinate[0]))
+                row_list.reverse()
+                column_list = list(range(start_crossing_coordinate[1], len(self.crossing_array[1])))
+
+                for i in row_list:
+                    for j in column_list:
+                        self.mid_node_set.clear()
+                        res_first = self.get_route_vertical(start_crossing_coordinate, (i, j))
+                        self.mid_node_set.clear()
+                        res_last = self.get_route_vertical((i, j), end_crossing_coordinate)
+                        if type(res_first) is list and type(res_last) is list:
+                            for road_id in res_first:
+                                if road_id in res_last:
+                                    continue
+                            route = res_first
+                            route.extend(res_last)
+                            return route
+
+                column_list = list(range(0, start_crossing_coordinate[1]))
+                for i in row_list:
+                    for j in column_list:
+                        self.mid_node_set.clear()
+                        res_first = self.get_route_vertical(start_crossing_coordinate, (i, j))
+                        self.mid_node_set.clear()
+                        res_last = self.get_route_vertical((i, j), end_crossing_coordinate)
+                        if type(res_first) is list and type(res_last) is list:
+                            for road_id in res_first:
+                                if road_id in res_last:
+                                    continue
+                            route = res_first
+                            route.extend(res_last)
+                            return route
+            else:
+                row_list = list(range(start_crossing_coordinate[0] + 1, len(self.crossing_array)))
+                column_list = list(range(0, start_crossing_coordinate[1] + 1))
+                column_list.reverse()
+                for i in row_list:
+                    for j in column_list:
+                        self.mid_node_set.clear()
+                        res_first = self.get_route_vertical(start_crossing_coordinate, (i, j))
+                        self.mid_node_set.clear()
+                        res_last = self.get_route_vertical((i, j), end_crossing_coordinate)
+                        if type(res_first) is list and type(res_last) is list:
+                            for road_id in res_first:
+                                if road_id in res_last:
+                                    continue
+                            route = res_first
+                            route.extend(res_last)
+                            return route
+
+                column_list = list(range(start_crossing_coordinate[1] + 1, len(self.crossing_array[0])))
+                for i in row_list:
+                    for j in column_list:
+                        self.mid_node_set.clear()
+                        res_first = self.get_route_vertical(start_crossing_coordinate, (i, j))
+                        self.mid_node_set.clear()
+                        res_last = self.get_route_vertical((i, j), end_crossing_coordinate)
+                        if type(res_first) is list and type(res_last) is list:
+                            for road_id in res_first:
+                                if road_id in res_last:
+                                    continue
+                            route = res_first
+                            route.extend(res_last)
+                            return route
+
+        return False
+
+    def get_route_move_then_get_route(self, car_object):
+        self.mid_node_set.clear()
+
+        route = self.move_then_get_route(car_object=car_object)
+
+        if type(route) is list:
+            cost = self.get_route_cost_time(car_object, route_list=route)
+            return cost, route
+        else:
+            return None
+
     def get_route_cost_time(self, car_object, route_list):
         """
         得到对于给定的车辆，走给定的路线需要花费的时间
@@ -917,11 +1357,28 @@ class TrafficManaging(object):
 
         return total_time
 
-    def find_min_time_path_with_floyd(self):
-        size = len(self.crossing_id_to_object)
-        dis = [[-1] * size for i in range(size)]
-        for crossing_id in self.crossing_id_to_object:
-            crossing_object = self.crossing_id_to_object[crossing_id]
+    def get_floyed_route_dict(self):
+        route_dict = {}
+        for start_crossing_id in sorted(self.crossing_id_to_object.keys()):
+            for end_crossing_id in sorted(self.crossing_id_to_object.keys()):
+                if start_crossing_id == end_crossing_id:
+                    continue
+                params = [-1, start_crossing_id, end_crossing_id, 100, 0]
+                car_object = Car(params=params)
+                cost_temp, curr_route = self.find_min_time_path_with_dijkstra(car_object=car_object)
+                route_dict[(start_crossing_id, end_crossing_id)] = curr_route
+        return route_dict
+
+    def find_min_time_path_with_floyd(self, car_object):
+        # size = len(self.crossing_id_to_object)
+        # dis = [[-1] * size for i in range(size)]
+        # for crossing_id in self.crossing_id_to_object:
+        #     crossing_object = self.crossing_id_to_object[crossing_id]
+        start_crossing_id = car_object.start_crossing_id
+        end_crossing_id = car_object.end_crossing_id
+        curr_route = self.floyed_route_dict[(start_crossing_id, end_crossing_id)]
+        cost = self.get_route_cost_time(car_object = car_object, route_list=curr_route)
+        return cost, curr_route
 
     def get_res(self, answer_path = 'answer.txt'):
         file_write = open(answer_path, mode='w')
@@ -960,11 +1417,60 @@ class TrafficManaging(object):
             car_num_list.append(len(car_object_list))
         # sorted_car_num_list = sorted(car_num_list)
 
+        # car_count = 0
+        # program_start_time = time.time()
+
         curr_time = start_time
+        # print(start_time)
         for crossing_id, car_object_list in crossing_car_dict.items():
             max_time = 0
             for car_object in car_object_list:
                 cost, min_time_route = self.find_min_time_path_with_dijkstra(car_object)
+                # car_count += 1
+                # if car_count % 1000 == 0:
+                #     print (time.time() - program_start_time)
+                if cost > max_time:
+                    max_time = cost
+                file_write.write("(%d, %d" % (car_object.car_id, curr_time))
+                for road_id in min_time_route:
+                    file_write.write(", %d" % road_id)
+                file_write.write(")\n")
+            curr_time += max_time / 1
+
+        file_write.close()
+
+    def get_res_per_crossing_with_floyed(self, answer_path='answer.txt'):
+        file_write = open(answer_path, mode='w')
+
+        start_time = 0
+        for car_id, car_object in self.car_id_to_object.items():
+            if car_object.start_time > start_time:
+                start_time = car_object.start_time
+
+        crossing_car_dict = {}
+        for car_id, car_object in self.car_id_to_object.items():
+            if car_object.start_crossing_id in crossing_car_dict:
+                crossing_car_dict[car_object.start_crossing_id].append(car_object)
+            else:
+                crossing_car_dict[car_object.start_crossing_id] = [car_object]
+
+        car_num_list = []
+        for crossing_id, car_object_list in crossing_car_dict.items():
+            car_num_list.append(len(car_object_list))
+        # sorted_car_num_list = sorted(car_num_list)
+
+        # car_count = 0
+        # program_start_time = time.time()
+
+        curr_time = start_time
+        # print(start_time)
+        for crossing_id, car_object_list in crossing_car_dict.items():
+            max_time = 0
+            for car_object in car_object_list:
+                cost, min_time_route = self.find_min_time_path_with_floyd(car_object)
+                # car_count += 1
+                # if car_count % 1000 == 0:
+                #     print (time.time() - program_start_time)
                 if cost > max_time:
                     max_time = cost
                 file_write.write("(%d, %d" % (car_object.car_id, curr_time))
@@ -1032,11 +1538,12 @@ class TrafficManaging(object):
                     self.crossing_car_dict[crossing_object.crossing_id].remove(car_object)
                     self.car_id_to_object.pop(car_object.car_id)
             if line_count % 2 == 0:
-                curr_time += max_time_cost_line * 1 / 1
+                curr_time += max_time_cost_line * 1 / 4
             else:
-                curr_time += max_time_cost_line * 1 / 1
+                curr_time += max_time_cost_line * 1 / 3
 
         # curr_time = start_time
+
         for crossing_id, car_object_list in self.crossing_car_dict.items():
             max_time = 0
             for car_object in car_object_list:
@@ -1051,7 +1558,86 @@ class TrafficManaging(object):
 
         file_write.close()
 
-    def get_res_per_crossing_line_prj(self, answer_path='answer.txt'):
+
+    def get_res_per_crossing_line_then_move_and_get_other_route(self, answer_path='answer.txt'):
+        file_write = open(answer_path, mode='w')
+
+        start_time = 0
+        for car_id, car_object in self.car_id_to_object.items():
+            if car_object.start_time > start_time:
+                start_time = car_object.start_time
+
+        curr_time = start_time
+
+        size = len(self.crossing_array)
+        line_index_list = [0] * size
+
+        mid = int(size / 2)
+        if size % 2 == 1:
+            mid += 1
+
+        list_1 = list(range(0, mid))
+        list_2 = list(range(mid, size))
+
+        index = 0
+        for num in list_1:
+            line_index_list[index] = num
+            index += 2
+
+        index = 1
+        for num in list_2:
+            line_index_list[index] = num
+            index += 2
+
+        # print(line_index_list)
+
+        line_count = 0
+        for line_index in line_index_list:
+            line_count += 1
+            crossing_line = self.crossing_array[line_index]
+            max_time_cost_line = 0
+            for crossing_object in crossing_line:
+                arranged_car_list = []
+                for car_object in self.crossing_car_dict[crossing_object.crossing_id]:
+                    res = self.get_route_vertical_then_horizontal(car_object)
+                    if res is None:
+                        continue
+                    cost, route_list = res
+                    arranged_car_list.append(car_object)
+                    if cost > max_time_cost_line:
+                        max_time_cost_line = cost
+                    file_write.write("(%d, %d" % (car_object.car_id, curr_time))
+                    for road_id in route_list:
+                        file_write.write(", %d" % road_id)
+                    file_write.write(")\n")
+
+                arranged_car_list = set(arranged_car_list)
+                for car_object in arranged_car_list:
+                    self.crossing_car_dict[crossing_object.crossing_id].remove(car_object)
+                    self.car_id_to_object.pop(car_object.car_id)
+            if line_count % 2 == 0:
+                curr_time += max_time_cost_line * 1 / 4
+            else:
+                curr_time += max_time_cost_line * 1 / 3
+
+        # curr_time = start_time
+        # curr_time += 200
+
+        for crossing_id, car_object_list in self.crossing_car_dict.items():
+            max_time = 0
+            for car_object in car_object_list:
+                cost, min_time_route = self.get_route_move_then_get_route(car_object)
+                if cost > max_time:
+                    max_time = cost
+                file_write.write("(%d, %d" % (car_object.car_id, curr_time))
+                for road_id in min_time_route:
+                    file_write.write(", %d" % road_id)
+                file_write.write(")\n")
+            curr_time += max_time * 1 / 4
+
+        file_write.close()
+
+    def prj_get_res_per_crossing_line(self, answer_path='answer.txt'):
         file_write = open(answer_path, mode='w')
 
         start_time = 0
@@ -1108,31 +1694,35 @@ class TrafficManaging(object):
             curr_time += max_time_cost_line * 3 / 4
 
         curr_time = start_time
-        # 通过遍历两遍来实现相应功能，第一遍遍历找到偶数坐标点所需要的最大时间，第二遍遍历实现写入txt
-        even_max_time = 0
-        odd_max_time = 0
+        # print(curr_time)
+
+        # 通过遍历两遍来实现相应功能，第一遍遍历找到每个路口所需要的时间，第二遍遍历实现写入txt
+        crossing_time_matrix = {}
+
         for crossing_id, car_object_list in self.crossing_car_dict.items():
-            # 通过crossing_id获取横纵坐标
-            [x, y] = self.index_in_crossing_array[crossing_id]
+            max_time = 0
+            for car_object in car_object_list:
+                cost, min_time_route = self.find_min_time_path_with_dijkstra(car_object)
+                if cost > max_time:
+                    max_time = cost
+            crossing_time_matrix[crossing_id] = max_time
+        # print(crossing_time_matrix)
+        # 对矩阵进行处理
+        temp = curr_time
+
+        for crossing_id in crossing_time_matrix.keys():
+            crossing_time_matrix[crossing_id] = crossing_time_matrix[crossing_id] + temp
+            temp = crossing_time_matrix[crossing_id]
+
+        # print('!!!', crossing_time_matrix)
+
+        for crossing_id, car_object_list in self.crossing_car_dict.items():
 
             for car_object in car_object_list:
                 cost, min_time_route = self.find_min_time_path_with_dijkstra(car_object)
-                if (cost > even_max_time) and (x + y) % 2 == 0:
-                    even_max_time = cost
-                    continue
-                if (cost > odd_max_time) and (x + y) % 2 != 0:
-                    odd_max_time = cost
-
-        for crossing_id, car_object_list in self.crossing_car_dict.items():
-            [x, y] = self.index_in_crossing_array[crossing_id]
-            if (x + y) % 2 == 0:
-                road_time = even_max_time + curr_time
-            if (x + y) % 2 != 0:
-                road_time = even_max_time + odd_max_time + curr_time
-            for car_object in car_object_list:
-                cost, min_time_route = self.find_min_time_path_with_dijkstra(car_object)
-
-                file_write.write("(%d, %d" % (car_object.car_id, road_time))
+                # print(crossing_id)
+                # print(crossing_time_matrix[crossing_id])
+                file_write.write("(%d, %d" % (car_object.car_id, crossing_time_matrix[crossing_id]))
                 for road_id in min_time_route:
                     file_write.write(", %d" % road_id)
                 file_write.write(")\n")
@@ -1376,6 +1966,10 @@ class TrafficManaging(object):
                 node_not_placed.append(crossing_object)
 
         while len(node_not_placed) > 0:
+
+            # for node_object in node_not_placed:
+            #     print(node_object.crossing_id)
+
             node_placed = []
             for crossing_object in node_not_placed:
                 flag_find_index = False
@@ -1475,9 +2069,9 @@ def main():
     road_path = sys.argv[2]
     cross_path = sys.argv[3]
     answer_path = sys.argv[4]
-
+  
     tm = TrafficManaging(road_path, car_path, cross_path)
-    tm.get_res_per_crossing_line(answer_path)
+    tm.get_res_per_crossing_with_floyed(answer_path)
 
     # logging.info("car_path is %s" % (car_path))
     # logging.info("road_path is %s" % (road_path))
